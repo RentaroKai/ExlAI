@@ -115,15 +115,31 @@ class RuleService:
         )
         prompt_instructions.append("\n生成するプロンプトの要件:")
         prompt_instructions.append("* 提示された例だけでなく、他の同様の入力に対しても適用できるような、汎用的な指示にしてください。")
-        prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章(20文字以内)にまとめること。返答例は別途添付するためここでは端的な表現を心がけること")
+        prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章にまとめること。返答例は別途添付するためここでは端的な表現を心がけること")
+        # JSON形式で出力させ、promptキーの値を取得する指示を追加
+        prompt_instructions.append("返答はJSON形式で {\"prompt\": \"<プロンプト>\"} のみを返し、他の文言を含めないでください。")
         try:
-            logger.info("Generating rule prompt via Gemini API...")
+            logger.info("Generating rule prompt via Gemini API (JSON format)...")
             resp1 = self.gemini.client.models.generate_content(
                 model=self.gemini.transcription_model,
                 contents="\n".join(prompt_instructions)
             )
-            rule_prompt = resp1.text.strip()
-            logger.info(f"Generated rule prompt: {rule_prompt}")
+            text = resp1.text.strip()
+            # コードブロックや余分な記号を除去
+            if text.startswith("```"):
+                text = re.sub(r"```(?:json)?\\n?", "", text)
+                text = text.rstrip("`\\n ")
+            # JSON部分を抽出してパース
+            start = text.find("{")
+            end = text.rfind("}")
+            json_str = text[start:end+1] if start != -1 and end != -1 else text
+            try:
+                data = json.loads(json_str)
+                rule_prompt = data.get("prompt", "").strip()
+                logger.info(f"Parsed rule prompt from JSON: {rule_prompt}")
+            except Exception as e:
+                logger.error(f"プロンプトJSONパースエラー: {e}, raw text: '{text}'")
+                rule_prompt = ""
         except Exception as e:
             logger.error(f"プロンプト生成エラー: {e}")
             rule_prompt = ""
