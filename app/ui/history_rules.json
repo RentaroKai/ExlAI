@@ -184,33 +184,6 @@
     "rule_name": "英訳格納"
   },
   {
-    "title": "代表色抽出",
-    "prompt": "**プロンプト:**\n\n入力の代表的な色を答えて",
-    "json_format_example": [
-      {
-        "conversations": [
-          {
-            "色": "赤"
-          }
-        ]
-      }
-    ],
-    "sample_data": {
-      "headers": [
-        "AIの進捗",
-        "元の値",
-        "色"
-      ],
-      "rows": [
-        [
-          "ルール完成",
-          "りんご",
-          "赤"
-        ]
-      ]
-    }
-  },
-  {
     "title": "単語英訳",
     "prompt": "単語を英訳して。",
     "json_format_example": [
@@ -247,22 +220,12 @@
     "rule_name": "単語英訳"
   },
   {
-    "title": "英独翻訳",
-    "prompt": "**英訳・独訳してください**",
-    "json_format_example": [
-      {
-        "conversations": [
-          {
-            "英訳": "thunder",
-            "ドイツ語訳": "Blitzschlag"
-          },
-          {
-            "英訳": "cloth",
-            "ドイツ語訳": "Kleid"
-          }
-        ]
-      }
-    ],
+    "title": "翻訳ルール",
+    "prompt": "**プロンプト:**\n単語を英独に翻訳して。",
+    "json_format_example": {
+      "英訳": "",
+      "ドイツ語訳": ""
+    },
     "sample_data": {
       "headers": [
         "AIの進捗",
@@ -282,6 +245,67 @@
           "衣装",
           "cloth",
           "Kleid"
+        ]
+      ]
+    }
+  },
+  {
+    "title": "翻訳ルール",
+    "prompt": "**プロンプト:**\n単語を英独に翻訳して。",
+    "json_format_example": {
+      "英訳": "",
+      "ドイツ語訳": ""
+    },
+    "sample_data": {
+      "headers": [
+        "AIの進捗",
+        "元の値",
+        "英訳",
+        "ドイツ語訳"
+      ],
+      "rows": [
+        [
+          "ルール完成",
+          "雷",
+          "thunder",
+          "Blitzschlag"
+        ],
+        [
+          "ルール完成",
+          "衣装",
+          "cloth",
+          "Kleid"
+        ]
+      ]
+    },
+    "rule_name": "翻訳ルール"
+  },
+  {
+    "title": "代表色形抽出",
+    "prompt": "**プロンプト案:**\n\n**代表的な色と形を抽出**",
+    "json_format_example": {
+      "色": "",
+      "形": ""
+    },
+    "sample_data": {
+      "headers": [
+        "AIの進捗",
+        "元の値",
+        "色",
+        "形"
+      ],
+      "rows": [
+        [
+          "ルール完成",
+          "りんご",
+          "赤",
+          "まるい"
+        ],
+        [
+          "ルール完成",
+          "お皿",
+          "白",
+          "まるい"
         ]
       ]
     }

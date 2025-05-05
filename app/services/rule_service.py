@@ -53,58 +53,31 @@ class RuleService:
         except Exception as e:
             logger.error(f"Failed to save rules: {e}")
 
-    def _generate_json_example(self, sample_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """sample_data から json_format_example を生成する"""
-        logger.info("Generating json_format_example from sample_data...")
+    def _generate_json_example(self, sample_data: Dict[str, Any]) -> Dict[str, str]:
+        """sample_data から json_format_example をヘッダー→空文字のマップ形式で生成する"""
+        logger.info("Generating json_format_example map from sample_data...")
         headers = sample_data.get("headers", [])
-        rows = sample_data.get("rows", [])
 
-        # バリデーション
-        if not headers or not rows:
-            logger.error("sample_data is empty or missing headers/rows.")
-            return []
-        if any(len(row) != len(headers) for row in rows):
-             # ヘッダ数と要素数が異なる行がある場合、警告ログを出力
-            logger.warning("Some rows have inconsistent length with headers. Skipping those.")
-            # ヘッダ数と同じ要素数の行のみを抽出
-            valid_rows = [row for row in rows if len(row) == len(headers)]
-            if not valid_rows:
-                logger.error("No valid rows found in sample_data.")
-                return []
-            rows = valid_rows # 有効な行のみを使用
-
+        # バリデーション: ヘッダーが存在すること
+        if not headers:
+            logger.error("sample_data missing headers.")
+            return {}
 
         # 出力対象ヘッダーを抽出 (インデックス3以降、空文字除外)
-        output_indices = [
-            idx for idx, h in enumerate(headers, start=1)
-            if idx >= 3 and h.strip() # 3列目以降かつ空でないヘッダー
+        output_headers = [
+            h for idx, h in enumerate(headers, start=1)
+            if idx >= 3 and h.strip()
         ]
-        output_headers = [headers[i-1] for i in output_indices]
-        logger.debug(f"Output headers identified: {output_headers}")
+        logger.debug(f"Output headers for example: {output_headers}")
 
         if not output_headers:
-             logger.warning("No output headers found (column 3 onwards, non-empty). Returning empty example.")
-             return []
+            logger.warning("No output headers found (column 3 onwards, non-empty). Returning empty example map.")
+            return {}
 
-
-        # 各行ごとに辞書生成
-        conversations = []
-        for row_idx, row in enumerate(rows):
-            try:
-                entry = {}
-                for header_idx, key in zip(output_indices, output_headers):
-                    # header_idx は 1-based なので、rowアクセス時は -1 する
-                    entry[key] = row[header_idx - 1]
-                conversations.append(entry)
-            except IndexError:
-                logger.warning(f"Skipping row {row_idx+1} due to index error (likely inconsistent row length despite initial check).")
-            except Exception as e:
-                 logger.error(f"Error processing row {row_idx+1}: {e}")
-
-
-        result = [{"conversations": conversations}]
-        logger.info(f"Successfully generated json_format_example with {len(conversations)} entries.")
-        return result
+        # 各ヘッダーに対して空文字をセット
+        example_map: Dict[str, str] = { key: "" for key in output_headers }
+        logger.info(f"Generated json_format_example map with keys: {output_headers}")
+        return example_map
 
     def create_rule(self, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
