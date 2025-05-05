@@ -299,7 +299,8 @@ class RuleService:
         # 出力ヘッダーのインデックスを取得 (3列目以降)
         output_indices = [idx for idx, h in enumerate(headers, start=1) if idx >= 3 and h.strip()]
         output_headers = [headers[i-1] for i in output_indices]
-
+        # ログ: 処理開始
+        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
 
         logger.info(f"Applying rule '{rule_id}' based on sample matching...")
         for inp in inputs:
@@ -323,14 +324,42 @@ class RuleService:
                      results.append({"input": inp, "output": {}, "status": "error", "error_msg": f"サンプル処理中にエラー発生: {e}"})
 
             else:
-                logger.debug(f"Input '{inp}' did not match any sample in rule '{rule_id}'.")
-                # === 将来的なAI呼び出し箇所 ===
-                # ここで Gemini API を呼び出して結果を生成するロジックを追加
-                # 例: result = self.gemini.apply_dynamic_prompt(rule['prompt'], inp, rule['json_format_example'])
-                # results.append(result)
-                # 現状はサンプル一致しない場合はエラーとする
-                results.append({"input": inp, "output": {}, "status": "error", "error_msg": "サンプルデータに一致しません"})
+                logger.debug(f"Input '{inp}' did not match any sample in rule '{rule_id}', calling AI.")
+                # サンプル一致しない場合はAIを呼び出して処理
+                try:
+                    # プロンプトの組み立て
+                    lines = [
+                        rule.get("prompt", ""),
+                        "次のようなJSONフォーマットで返答してください。",
+                        json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2),
+                        f"元の値: {inp}"
+                    ]
+                    combined_prompt = "\n".join(lines)
+                    # 送信プロンプトをログに出力
+                    logger.debug(f"送信プロンプト内容:\n{combined_prompt}")
+                    resp = self.gemini.client.models.generate_content(
+                        model=self.gemini.transcription_model,
+                        contents=combined_prompt
+                    )
+                    text = resp.text.strip()
+                    # コードブロックマーカー除去
+                    if text.startswith("```"):
+                        text = re.sub(r"```(?:json)?\n?", "", text)
+                        text = text.rstrip("`\n ")
+                    # JSON部分抽出
+                    start = text.find("{")
+                    end = text.rfind("}")
+                    json_str = text[start:end+1] if start != -1 and end != -1 else text
+                    data = json.loads(json_str)
+                    out = {key: data.get(key, "") for key in output_headers}
+                    results.append({"input": inp, "output": out, "status": "success"})
+                    logger.debug(f"AI output for input '{inp}': {out}")
+                except Exception as e:
+                    logger.error(f"AI処理エラー for input '{inp}': {e}")
+                    results.append({"input": inp, "output": {}, "status": "error", "error_msg": str(e)})
 
-
-        logger.info(f"Finished applying rule '{rule_id}'. {len(results)} results generated.")
+        # ログ: 処理完了
+        success_count = sum(1 for r in results if r.get("status") == "success")
+        error_count = len(results) - success_count
+        logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
         return results 

@@ -1,7 +1,17 @@
 import sys
 import logging
+import os
+# ログファイルパス設定
+LOG_FILE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'app.log'))
+# ファイルログハンドラ設定
+file_handler = logging.FileHandler(LOG_FILE_PATH, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('[%(levelname)s] %(message)s')
+file_handler.setFormatter(formatter)
+logging.getLogger().addHandler(file_handler)
+logging.getLogger().setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, QMessageBox
 from PySide6.QtCore import Qt
 
 from .excel_panel import ExcelPanel
@@ -86,29 +96,57 @@ class IntegratedExcelUI(QMainWindow):
         for row in rows:
             item = active_table.item(row, 1)
             inputs.append(item.text() if item and item.text() else "")
-        # ルール適用
+        # 処理前に進捗を「処理中」に設定
+        from PySide6.QtWidgets import QTableWidgetItem
+        for row in rows:
+            in_progress = QTableWidgetItem("処理中")
+            in_progress.setTextAlignment(Qt.AlignCenter)
+            active_table.setItem(row, 0, in_progress)
+        # UI更新を強制
+        QApplication.processEvents()
+        # UIロックとスピナー表示 & 処理開始ログ
+        self.ai_panel.process_selected_btn.setEnabled(False)
+        self.ai_panel.process_all_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
         try:
             results = self.ai_panel.rule_service.apply_rule(rule_id, inputs)
             from PySide6.QtWidgets import QTableWidgetItem
-            from PySide6.QtCore import Qt
             for row, result in zip(rows, results):
-                # 進捗列設定
                 status = result.get('status')
-                mark = '✓' if status == 'success' else '✗'
-                check_item = QTableWidgetItem(mark)
+                text = "完了" if status == 'success' else "エラー"
+                check_item = QTableWidgetItem(text)
                 check_item.setTextAlignment(Qt.AlignCenter)
+                if status != 'success':
+                    check_item.setToolTip(result.get('error_msg', ''))
                 active_table.setItem(row, 0, check_item)
                 # 出力フィールド更新
                 output = result.get('output', {})
                 for header, val in output.items():
-                    # ヘッダー列を検索して更新
                     for c in range(active_table.columnCount()):
                         hdr = active_table.item(0, c)
                         if hdr and hdr.text() == header:
                             active_table.setItem(row, c, QTableWidgetItem(val))
                             break
+            # 処理完了ログ
+            success_count = sum(1 for r in results if r.get('status') == 'success')
+            error_count = len(results) - success_count
+            logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
         except Exception as e:
-            logger.error(f"ルール適用エラー: {e}")
+            logger.error(f"apply_rule 中断: {e}")
+            # 例外ダイアログ表示
+            msg = QMessageBox(self)
+            msg.setWindowTitle("エラーが発生しました")
+            msg.setText("処理中に予期せぬエラーが発生しました")
+            open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
+            msg.exec()
+            if msg.clickedButton() == open_btn:
+                os.startfile(LOG_FILE_PATH)
+        finally:
+            # UIロック解除
+            self.ai_panel.process_selected_btn.setEnabled(True)
+            self.ai_panel.process_all_btn.setEnabled(True)
+            QApplication.restoreOverrideCursor()
     
     def process_all(self):
         """すべての行を処理する"""
@@ -117,34 +155,72 @@ class IntegratedExcelUI(QMainWindow):
             from PySide6.QtWidgets import QToolTip
             QToolTip.showText(self.ai_panel.process_all_btn.mapToGlobal(self.ai_panel.process_all_btn.rect().center()), "ルールが選択されていません", self)
             return
-        # 両テーブルの入力リストを構築
-        tables = [self.excel_panel.sample_table, self.excel_panel.data_table]
-        for tbl in tables:
-            inputs = []
-            rows = list(range(1, tbl.rowCount()))
-            for row in rows:
-                item = tbl.item(row, 1)
-                inputs.append(item.text() if item and item.text() else "")
-            # ルール適用
-            try:
-                results = self.ai_panel.rule_service.apply_rule(rule_id, inputs)
-                from PySide6.QtWidgets import QTableWidgetItem
-                from PySide6.QtCore import Qt
-                for row, result in zip(rows, results):
-                    status = result.get('status')
-                    mark = '✓' if status == 'success' else '✗'
-                    check_item = QTableWidgetItem(mark)
-                    check_item.setTextAlignment(Qt.AlignCenter)
-                    tbl.setItem(row, 0, check_item)
-                    output = result.get('output', {})
-                    for header, val in output.items():
-                        for c in range(tbl.columnCount()):
-                            hdr = tbl.item(0, c)
-                            if hdr and hdr.text() == header:
-                                tbl.setItem(row, c, QTableWidgetItem(val))
-                                break
-            except Exception as e:
-                logger.error(f"ルール適用エラー: {e}")
+        # 実データパネルの未処理行のみを対象に処理
+        tbl = self.excel_panel.data_table
+        # 対象行の抽出 (AI進捗列が空, '未処理', 'エラー')
+        rows = []
+        for row in range(1, tbl.rowCount()):
+            item = tbl.item(row, 0)
+            status_text = item.text().strip() if item and item.text() else ""
+            if status_text == "" or status_text == "未処理" or status_text == "エラー":
+                rows.append(row)
+        if not rows:
+            return
+        # 処理前に進捗を「処理中」に設定
+        from PySide6.QtWidgets import QTableWidgetItem
+        for row in rows:
+            in_progress = QTableWidgetItem("処理中")
+            in_progress.setTextAlignment(Qt.AlignCenter)
+            tbl.setItem(row, 0, in_progress)
+        QApplication.processEvents()
+        # 入力文字列リスト作成
+        inputs = []
+        for row in rows:
+            cell = tbl.item(row, 1)
+            inputs.append(cell.text() if cell and cell.text() else "")
+        # UIロックとスピナー表示 & 処理開始ログ
+        self.ai_panel.process_selected_btn.setEnabled(False)
+        self.ai_panel.process_all_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        try:
+            results = self.ai_panel.rule_service.apply_rule(rule_id, inputs)
+            from PySide6.QtWidgets import QTableWidgetItem
+            for row, result in zip(rows, results):
+                status = result.get('status')
+                text = "完了" if status == 'success' else "エラー"
+                check_item = QTableWidgetItem(text)
+                check_item.setTextAlignment(Qt.AlignCenter)
+                if status != 'success':
+                    check_item.setToolTip(result.get('error_msg', ''))
+                tbl.setItem(row, 0, check_item)
+                # 出力フィールド更新
+                output = result.get('output', {})
+                for header, val in output.items():
+                    for c in range(tbl.columnCount()):
+                        hdr = tbl.item(0, c)
+                        if hdr and hdr.text() == header:
+                            tbl.setItem(row, c, QTableWidgetItem(val))
+                            break
+            # 処理完了ログ
+            success_count = sum(1 for r in results if r.get('status') == 'success')
+            error_count = len(results) - success_count
+            logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
+        except Exception as e:
+            logger.error(f"apply_rule 中断: {e}")
+            # 例外ダイアログ表示
+            msg = QMessageBox(self)
+            msg.setWindowTitle("エラーが発生しました")
+            msg.setText("処理中に予期せぬエラーが発生しました")
+            open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
+            msg.exec()
+            if msg.clickedButton() == open_btn:
+                os.startfile(LOG_FILE_PATH)
+        finally:
+            # UIロック解除
+            self.ai_panel.process_selected_btn.setEnabled(True)
+            self.ai_panel.process_all_btn.setEnabled(True)
+            QApplication.restoreOverrideCursor()
 
     def load_csv(self):
         from PySide6.QtWidgets import QFileDialog
