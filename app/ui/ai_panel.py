@@ -224,15 +224,28 @@ class AIPanel(QWidget):
         # サンプルデータ取得
         samples = []
         table = self.excel_panel.sample_table
-        headers = [table.item(0, c).text() for c in range(table.columnCount())]
+        # ヘッダー取得（Noneの場合は空文字を設定）
+        headers = []
+        for c in range(table.columnCount()):
+            item = table.item(0, c)
+            headers.append(item.text() if item else "")
+        logger.debug(f"Auto-generate headers: {headers}")
         for row in range(1, table.rowCount()):
+            logger.debug(f"Processing sample row {row}")
             input_item = table.item(row, 1)
-            if not input_item or not input_item.text():
+            if not input_item:
+                logger.warning(f"Row {row}: input_item is None")
+                continue
+            if not input_item.text():
+                logger.debug(f"Row {row}: input text empty, skip")
                 continue
             output = {}
             for col, header in enumerate(headers[2:], start=2):
                 item = table.item(row, col)
-                output[header] = item.text() if item else ''
+                if not item:
+                    logger.debug(f"Row {row}, col {col} header '{header}': item is None")
+                text = item.text() if item else ''
+                output[header] = text
             samples.append({'input': input_item.text(), 'output': output, 'fields': headers[2:]})
         # ルール生成または再生成API呼び出し
         try:
@@ -261,5 +274,9 @@ class AIPanel(QWidget):
             self.apply_history_rule(new_title)
         except NotImplementedError:
             logger.error("create_rule未実装")
+            QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
+                              "ルール生成機能が未実装です", self)
         except Exception as e:
-            logger.error(f"ルール生成エラー: {e}") 
+            logger.error(f"ルール生成エラー: {e}")
+            QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
+                              f"ルール生成中にエラーが発生しました: {e}", self)

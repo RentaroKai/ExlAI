@@ -88,16 +88,13 @@ class RuleService:
         )
         prompt_instructions.append("\n生成するプロンプトの要件:")
         prompt_instructions.append("* 提示された例だけでなく、他の同様の入力に対しても適用できるような、汎用的な指示にしてください。")
-        prompt_instructions.append("* プロンプトは、AIに対する明確な指示として機能する、端的で短い文章(20文字以内)にまとめること。")
+        prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章(20文字以内)にまとめること。返答例は別途添付するためここでは端的な表現を心がけること")
         try:
             resp1 = self.gemini.client.models.generate_content(
                 model=self.gemini.transcription_model,
                 contents="\n".join(prompt_instructions)
             )
             rule_prompt = resp1.text.strip()
-            # Ensure the prompt ends with the required phrase
-            if not rule_prompt.endswith("次のjsonフォーマットで返すこと"):
-                rule_prompt += " 次のjsonフォーマットで返すこと"
         except Exception as e:
             logger.error(f"プロンプト生成エラー: {e}")
             rule_prompt = ""
