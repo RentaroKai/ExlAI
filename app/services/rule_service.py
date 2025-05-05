@@ -53,6 +53,59 @@ class RuleService:
         except Exception as e:
             logger.error(f"Failed to save rules: {e}")
 
+    def _generate_json_example(self, sample_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """sample_data から json_format_example を生成する"""
+        logger.info("Generating json_format_example from sample_data...")
+        headers = sample_data.get("headers", [])
+        rows = sample_data.get("rows", [])
+
+        # バリデーション
+        if not headers or not rows:
+            logger.error("sample_data is empty or missing headers/rows.")
+            return []
+        if any(len(row) != len(headers) for row in rows):
+             # ヘッダ数と要素数が異なる行がある場合、警告ログを出力
+            logger.warning("Some rows have inconsistent length with headers. Skipping those.")
+            # ヘッダ数と同じ要素数の行のみを抽出
+            valid_rows = [row for row in rows if len(row) == len(headers)]
+            if not valid_rows:
+                logger.error("No valid rows found in sample_data.")
+                return []
+            rows = valid_rows # 有効な行のみを使用
+
+
+        # 出力対象ヘッダーを抽出 (インデックス3以降、空文字除外)
+        output_indices = [
+            idx for idx, h in enumerate(headers, start=1)
+            if idx >= 3 and h.strip() # 3列目以降かつ空でないヘッダー
+        ]
+        output_headers = [headers[i-1] for i in output_indices]
+        logger.debug(f"Output headers identified: {output_headers}")
+
+        if not output_headers:
+             logger.warning("No output headers found (column 3 onwards, non-empty). Returning empty example.")
+             return []
+
+
+        # 各行ごとに辞書生成
+        conversations = []
+        for row_idx, row in enumerate(rows):
+            try:
+                entry = {}
+                for header_idx, key in zip(output_indices, output_headers):
+                    # header_idx は 1-based なので、rowアクセス時は -1 する
+                    entry[key] = row[header_idx - 1]
+                conversations.append(entry)
+            except IndexError:
+                logger.warning(f"Skipping row {row_idx+1} due to index error (likely inconsistent row length despite initial check).")
+            except Exception as e:
+                 logger.error(f"Error processing row {row_idx+1}: {e}")
+
+
+        result = [{"conversations": conversations}]
+        logger.info(f"Successfully generated json_format_example with {len(conversations)} entries.")
+        return result
+
     def create_rule(self, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         新規ルールをAIに生成させ、ローカルに保存 (3ステップ：prompt/json例/title)
@@ -66,6 +119,7 @@ class RuleService:
         headers_init = ["AIの進捗", "元の値"] + fields
         rows_init = [["ルール完成", s.get('input','')] + [s.get('output',{}).get(f,'') for f in fields] for s in samples]
         sample_data = {"headers": headers_init, "rows": rows_init}
+        logger.debug(f"Generated sample_data: {sample_data}")
 
         # --- Phase1: 動的プロンプト生成 ---
         prompt_instructions = []
@@ -90,29 +144,21 @@ class RuleService:
         prompt_instructions.append("* 提示された例だけでなく、他の同様の入力に対しても適用できるような、汎用的な指示にしてください。")
         prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章(20文字以内)にまとめること。返答例は別途添付するためここでは端的な表現を心がけること")
         try:
+            logger.info("Generating rule prompt via Gemini API...")
             resp1 = self.gemini.client.models.generate_content(
                 model=self.gemini.transcription_model,
                 contents="\n".join(prompt_instructions)
             )
             rule_prompt = resp1.text.strip()
+            logger.info(f"Generated rule prompt: {rule_prompt}")
         except Exception as e:
             logger.error(f"プロンプト生成エラー: {e}")
             rule_prompt = ""
 
-        # --- Phase2: JSONフォーマット例生成 ---
-        json_instructions = [
-            "このルールが出力すべきJSONフォーマットの例を示してください。",
-            "応答は有効なJSON配列形式で返してください。"
-        ]
-        try:
-            resp2 = self.gemini.client.models.generate_content(
-                model=self.gemini.title_model,
-                contents="\n".join(json_instructions)
-            )
-            json_format_example = json.loads(resp2.text)
-        except Exception as e:
-            logger.error(f"JSONフォーマット生成エラー: {e}")
-            json_format_example = []
+        # --- Phase2: JSONフォーマット例生成 (Pythonで実装) ---
+        logger.info("Generating json_format_example using _generate_json_example...")
+        json_format_example = self._generate_json_example(sample_data)
+        logger.debug(f"Generated json_format_example: {json_format_example}")
 
         # --- Phase3: タイトル生成 ---
         title_instructions = [
@@ -121,6 +167,7 @@ class RuleService:
             f"命令文: {rule_prompt}"
         ]
         try:
+            logger.info("Generating rule title via Gemini API...")
             resp3 = self.gemini.client.models.generate_content(
                 model=self.gemini.title_model,
                 contents="\n".join(title_instructions)
@@ -131,7 +178,7 @@ class RuleService:
             if text.startswith("```"):
                 # ```json や ``` コードブロックマーカーを削除
                 text = re.sub(r"```(?:json)?\\n?", "", text)
-                text = text.rstrip("`\n ")
+                text = text.rstrip("`\\n ") # 末尾のバッククオート、改行、スペースを削除
             # JSON部分を抽出
             start = text.find("{")
             end = text.rfind("}")
@@ -139,13 +186,17 @@ class RuleService:
             try:
                 data = json.loads(json_str)
                 rule_name = data.get("rule_name", "").strip()
+                logger.info(f"Generated rule title: {rule_name}")
             except Exception as e:
-                logger.error(f"タイトルJSONパースエラー: {e}")
+                logger.error(f"タイトルJSONパースエラー: {e}, raw text: '{text}'")
                 # フォールバックで生テキストをタイトルとして使用
-                rule_name = text
+                rule_name = text if text else f"ルール生成 {now}" # 空文字の場合はデフォルト名
+                logger.warning(f"Using raw text or default as title: {rule_name}")
         except Exception as e:
             logger.error(f"タイトル生成エラー: {e}")
             rule_name = f"ルール生成 {now}"
+            logger.warning(f"Using default title due to generation error: {rule_name}")
+
 
         # --- ルールオブジェクト作成・保存 ---
         rule_obj = {
@@ -157,10 +208,11 @@ class RuleService:
         # ローカルファイルに保存
         self._rules.append(rule_obj)
         self._save_rules()
+        logger.info(f"Rule '{rule_name}' created and saved.")
 
         # 戻り値用メタデータ
         metadata = rule_obj.copy()
-        metadata['rule_name'] = rule_name
+        metadata['rule_name'] = rule_name # rule_nameをメタデータにも追加
         return metadata
 
     def regenerate_rule(self, rule_id: str, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -168,24 +220,55 @@ class RuleService:
         既存ルールを再生成し、更新する
         """
         # 指定ルールを検索
-        updated = None
+        updated_idx = -1
         for idx, r in enumerate(self._rules):
             if r.get('title') == rule_id:
-                updated = idx
+                updated_idx = idx
                 break
-        if updated is None:
+        if updated_idx == -1:
             raise GeminiAPIError(f"ルール '{rule_id}' が見つかりません")
-        # 新しいサンプルデータで置換
-        metadata = self.create_rule(samples)
-        # 古いルールを削除
-        self._rules.pop(updated)
-        self._save_rules()
-        return metadata
+
+        logger.info(f"Regenerating rule '{rule_id}'...")
+        # 新しいサンプルデータでルールを作成 (create_ruleを呼び出す)
+        try:
+            # create_rule は内部で _save_rules を呼ぶので、ここで古いルールを削除すると
+            # 保存タイミングによっては問題が起きる可能性がある。
+            # create_rule 成功後に古いものを削除する。
+            new_rule_metadata = self.create_rule(samples) # これが新しいルールをリストの末尾に追加する
+
+            # _rules リストから古いルールを削除する
+            # create_rule によって要素が追加されているので、インデックスがずれている可能性があるため、
+            # 再度タイトルで検索して削除する方が安全。
+            # ただし、create_ruleが同じ名前のルールを作る可能性があるため、
+            # 事前に見つけておいたインデックス `updated_idx` を使う。
+            # 注意: create_rule がリストに追加するため、削除対象は update_idx のまま。
+            if 0 <= updated_idx < len(self._rules) -1: # 末尾に追加されたので、それより前にあるはず
+                 del self._rules[updated_idx]
+                 self._save_rules() # 削除後に再度保存
+                 logger.info(f"Old rule '{rule_id}' removed after regeneration.")
+                 return new_rule_metadata # 新しいルールのメタデータを返す
+            else:
+                 # ここに来る場合は、何らかの理由で古いルールが見つからなかったか、
+                 # リスト操作に問題があった可能性。create_ruleで追加されたものが最新のはず。
+                 logger.warning(f"Could not find the old rule '{rule_id}' at index {updated_idx} after regeneration. The new rule was added.")
+                 self._save_rules() # 念のため保存
+                 return new_rule_metadata
+
+
+        except Exception as e:
+            logger.error(f"Error regenerating rule '{rule_id}': {e}")
+            # 再生成に失敗した場合、元のルールはそのまま残る
+            raise GeminiAPIError(f"ルール '{rule_id}' の再生成に失敗しました: {e}")
+
 
     def get_rules(self) -> List[Dict[str, Any]]:
         """
         保存済みルールのメタ情報リストを返却
         """
+        # ローカルファイルから最新の状態を読み込む（他のプロセスによる変更を反映するため）
+        # self._load_rules()
+        # ↑UIから頻繁に呼ばれる可能性があるため、毎回ロードするのは効率が悪い。
+        # 保存時に同期が取れている前提とする。必要であればUI側でリフレッシュを促す。
         return self._rules
 
     def delete_rule(self, rule_id: str) -> bool:
@@ -193,33 +276,72 @@ class RuleService:
         指定したrule_idのルールを削除する
         成功時にTrue、失敗時にFalseを返却
         """
-        for idx, r in enumerate(self._rules):
-            if r.get('title') == rule_id:
-                self._rules.pop(idx)
-                self._save_rules()
-                return True
-        logger.warning(f"削除対象のルール '{rule_id}' が見つかりませんでした")
-        return False
+        initial_length = len(self._rules)
+        self._rules = [r for r in self._rules if r.get('title') != rule_id]
+        if len(self._rules) < initial_length:
+            self._save_rules()
+            logger.info(f"Rule '{rule_id}' deleted successfully.")
+            return True
+        else:
+            logger.warning(f"削除対象のルール '{rule_id}' が見つかりませんでした")
+            return False
+
 
     def apply_rule(self, rule_id: str, inputs: List[str]) -> List[Dict[str, Any]]:
         """
         指定したルールを入力リストに適用し、結果を返却
+        (注: 現在の実装はサンプルデータとの完全一致のみ。将来的にはAI適用が必要)
         """
         # ルールを検索
         rule = next((r for r in self._rules if r.get('title') == rule_id), None)
         if not rule:
             raise GeminiAPIError(f"ルール '{rule_id}' が見つかりません")
+
         sample_data = rule.get('sample_data', {})
         headers = sample_data.get('headers', [])
         rows = sample_data.get('rows', [])
         results = []
+
+        if not headers or not rows:
+             logger.warning(f"Rule '{rule_id}' has empty sample_data. Cannot apply rule based on samples.")
+             # サンプルがない場合、全入力に対してエラーを返す
+             return [{"input": inp, "output": {}, "status": "error", "error_msg": "ルールにサンプルデータがありません"} for inp in inputs]
+
+        # 出力ヘッダーのインデックスを取得 (3列目以降)
+        output_indices = [idx for idx, h in enumerate(headers, start=1) if idx >= 3 and h.strip()]
+        output_headers = [headers[i-1] for i in output_indices]
+
+
+        logger.info(f"Applying rule '{rule_id}' based on sample matching...")
         for inp in inputs:
-            # マッチするサンプル行を検索
-            match = next((row for row in rows if row[1] == inp), None)
+            # マッチするサンプル行を検索 (2列目が入力値と一致するか)
+            match = next((row for row in rows if len(row) > 1 and row[1] == inp), None)
             if match:
-                # 出力フィールド生成
-                out = {headers[i]: match[i] for i in range(2, len(headers))}
-                results.append({"input": inp, "output": out, "status": "success"})
+                try:
+                    # 出力フィールド生成
+                    out = {}
+                    for idx, key in zip(output_indices, output_headers):
+                         if idx -1 < len(match): # 行の長さチェック
+                             out[key] = match[idx - 1]
+                         else:
+                             logger.warning(f"Index {idx-1} out of bounds for matched row in rule '{rule_id}' for input '{inp}'. Header: '{key}'")
+                             out[key] = "" # インデックス外の場合は空文字
+
+                    results.append({"input": inp, "output": out, "status": "success"})
+                    logger.debug(f"Input '{inp}' matched sample. Output: {out}")
+                except Exception as e:
+                     logger.error(f"Error processing matched row for input '{inp}' in rule '{rule_id}': {e}")
+                     results.append({"input": inp, "output": {}, "status": "error", "error_msg": f"サンプル処理中にエラー発生: {e}"})
+
             else:
+                logger.debug(f"Input '{inp}' did not match any sample in rule '{rule_id}'.")
+                # === 将来的なAI呼び出し箇所 ===
+                # ここで Gemini API を呼び出して結果を生成するロジックを追加
+                # 例: result = self.gemini.apply_dynamic_prompt(rule['prompt'], inp, rule['json_format_example'])
+                # results.append(result)
+                # 現状はサンプル一致しない場合はエラーとする
                 results.append({"input": inp, "output": {}, "status": "error", "error_msg": "サンプルデータに一致しません"})
+
+
+        logger.info(f"Finished applying rule '{rule_id}'. {len(results)} results generated.")
         return results 

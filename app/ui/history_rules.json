@@ -203,83 +203,28 @@
     }
   },
   {
-    "title": "プロンプト推測英訳JSON",
-    "prompt": "推測されるプロンプト：\n\n英訳 次のjsonフォーマットで返すこと",
-    "json_format_example": [],
-    "sample_data": {
-      "headers": [
-        "AIの進捗",
-        "元の値",
-        "英訳"
-      ],
-      "rows": [
-        [
-          "ルール完成",
-          "ごはん",
-          "food"
+    "title": "代表色判定",
+    "prompt": "入力の代表的な色を答えよ。",
+    "json_format_example": [
+      {
+        "conversations": [
+          {
+            "色": "赤"
+          }
         ]
-      ]
-    }
-  },
-  {
-    "title": "国別人気料理リストJSON出力",
-    "prompt": "**プロンプト:**\n国の人気料理を挙げて 次のjsonフォーマットで返すこと",
-    "json_format_example": [],
+      }
+    ],
     "sample_data": {
       "headers": [
         "AIの進捗",
         "元の値",
-        "人気料理"
+        "色"
       ],
       "rows": [
         [
           "ルール完成",
-          "イギリス",
-          "スコーン"
-        ],
-        [
-          "ルール完成",
-          "イタリア",
-          "パスタ"
-        ]
-      ]
-    },
-    "rule_name": "国別人気料理リストJSON出力"
-  },
-  {
-    "title": "単語英訳",
-    "prompt": "入力単語の英訳を出力。 次のjsonフォーマットで返すこと",
-    "json_format_example": [],
-    "sample_data": {
-      "headers": [
-        "AIの進捗",
-        "元の値",
-        "英語"
-      ],
-      "rows": [
-        [
-          "ルール完成",
-          "女性",
-          "lady"
-        ]
-      ]
-    }
-  },
-  {
-    "title": "校正",
-    "prompt": "**日本語を校正して。**",
-    "json_format_example": [],
-    "sample_data": {
-      "headers": [
-        "AIの進捗",
-        "元の値",
-        "校正後の文章"
-      ],
-      "rows": [
-        [
-          "ルール完成",
-          "ちょこれーつ",
-          "チョコレート"
+          "りんご",
+          "赤"
         ]
       ]
     }
