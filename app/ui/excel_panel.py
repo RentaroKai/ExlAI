@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
                               QTableWidgetItem, QFrame, QLabel, QSplitter,
                               QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QColor, QBrush, QPen
+from PySide6.QtGui import QFont, QColor, QBrush, QPen, QKeySequence
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,31 @@ class CustomTableWidget(QTableWidget):
         for i, label in enumerate(labels):
             item = QTableWidgetItem(label)
             self.setVerticalHeaderItem(i, item)
+
+    def keyPressEvent(self, event):
+        # Ctrl+Vで大量貼り付け時にテーブルを自動拡張する
+        from PySide6.QtWidgets import QApplication
+        if event.matches(QKeySequence.Paste):
+            text = QApplication.clipboard().text()
+            rows = text.splitlines()
+            logger.debug(f"Paste detected with {len(rows)} rows")
+            max_cols = max((len(r.split('\t')) for r in rows), default=0)
+            cur_r = max(self.currentRow(), 0)
+            cur_c = max(self.currentColumn(), 0)
+            need_rows = cur_r + len(rows) - self.rowCount()
+            need_cols = cur_c + max_cols - self.columnCount()
+            if need_rows > 0 or need_cols > 0:
+                new_r = self.rowCount() + max(need_rows, 0)
+                new_c = self.columnCount() + max(need_cols, 0)
+                logger.debug(f"Resizing table for paste from ({self.rowCount()},{self.columnCount()}) to ({new_r},{new_c})")
+                self.setRowCount(new_r)
+                self.setColumnCount(new_c)
+            # データをセルに設定
+            for dr, rowdata in enumerate(rows):
+                for dc, val in enumerate(rowdata.split('\t')):
+                    self.setItem(cur_r + dr, cur_c + dc, QTableWidgetItem(val))
+            return
+        super().keyPressEvent(event)
 
 class BorderDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
@@ -115,10 +140,11 @@ class ExcelPanel(QWidget):
         
         # 下部テーブル (実データ用)
         self.data_table = CustomTableWidget(13, 12)  # 実データ用の行数
+        # 横ヘッダーをA-Kまで設定
         self.data_table.setHorizontalHeaderLabels(["", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"])
+        # テーブルスタイルを適用
         self.setup_table_style(self.data_table)
-        
-        # A列の未入力セル表示用デリゲート設定
+        # 元の値列の未入力セル表示用デリゲート設定
         self.data_table.setItemDelegateForColumn(1, BorderDelegate(self.data_table))
         
         # ラベルとテーブルを水平レイアウトに追加
@@ -506,6 +532,20 @@ class ExcelPanel(QWidget):
                         font.setPointSize(size)
                         item.setFont(font)
 
+    def get_excel_column_labels(self, count: int) -> list[str]:
+        """1から始まる列数に対応したExcelライクな列名リストを返す。count は列数(A列が1)を指定。"""
+        labels: list[str] = []
+        for i in range(count):  # 0-based 内部計算
+            n = i
+            s = ''
+            while True:
+                s = chr(ord('A') + (n % 26)) + s
+                n = n // 26 - 1
+                if n < 0:
+                    break
+            labels.append(s)
+        return labels
+
     def load_csv(self, file_path: str):
         """CSVを読み込んでデータテーブルに反映する"""
         import csv
@@ -515,20 +555,44 @@ class ExcelPanel(QWidget):
         with open(file_path, newline='', encoding='utf-8') as f:
             reader = csv.reader(f)
             headers = next(reader, [])
-            # ヘッダー行設定 (B列以降)
-            for idx, header in enumerate(headers, start=1):
-                item = QTableWidgetItem(header)
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsSelectable)
-                self.data_table.setItem(0, idx, item)
-            # データ行設定
-            for row_idx, row_vals in enumerate(reader, start=1):
-                # リセット進捗列
-                chk = QTableWidgetItem('')
-                chk.setTextAlignment(Qt.AlignCenter)
-                self.data_table.setItem(row_idx, 0, chk)
-                for col_idx, val in enumerate(row_vals, start=1):
-                    item = QTableWidgetItem(val)
-                    self.data_table.setItem(row_idx, col_idx, item)
+            rows = list(reader)
+        # テーブル拡張
+        old_r, old_c = self.data_table.rowCount(), self.data_table.columnCount()
+        new_r = len(rows) + 1  # ヘッダー行含む
+        new_c = len(headers) + 1  # AI進捗列含む
+        logger.debug(f"Expanding data_table from ({old_r},{old_c}) to ({new_r},{new_c})")
+        self.data_table.setRowCount(new_r)
+        self.data_table.setColumnCount(new_c)
+        # リサイズ後にスタイルとデリゲートを再適用
+        self.setup_table_style(self.data_table)
+        # 元の値列（インデックス1）に未入力枠デリゲートを設定
+        self.data_table.setItemDelegateForColumn(1, BorderDelegate(self.data_table))
+        # 横ヘッダー(AI進捗列を空、以降Excelライクに生成)
+        col_labels = [""] + self.get_excel_column_labels(new_c - 1)
+        self.data_table.setHorizontalHeaderLabels(col_labels)
+        # 縦ヘッダー(0行目はヘッダー行、それ以降は1から)
+        v_labels = [""] + [str(i) for i in range(1, new_r)]
+        self.data_table.setVerticalHeaderLabels(v_labels)
+        # ヘッダー行はテンプレートのsample_tableヘッダーを参照して同期
+        logger.debug("load_csv: syncing header with sample_table")
+        for col in range(self.data_table.columnCount()):
+            if col < self.sample_table.columnCount():
+                sample_item = self.sample_table.item(0, col)
+                header_text = sample_item.text() if sample_item else ""
+            else:
+                header_text = ""
+            item = QTableWidgetItem(header_text)
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsSelectable)
+            self.data_table.setItem(0, col, item)
+        # データ行設定
+        for r, row_vals in enumerate(rows, start=1):
+            # 進捗列リセット
+            chk = QTableWidgetItem("")
+            chk.setTextAlignment(Qt.AlignCenter)
+            self.data_table.setItem(r, 0, chk)
+            for c, val in enumerate(row_vals, start=1):
+                item = QTableWidgetItem(val)
+                self.data_table.setItem(r, c, item)
 
     def save_csv(self, file_path: str):
         """データテーブルをCSVに保存する"""
