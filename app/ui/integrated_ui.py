@@ -76,8 +76,8 @@ class IntegratedExcelUI(QMainWindow):
     def process_selected(self):
         """選択行のみ処理する"""
         # 現在のルールチェック
-        rule_id = self.ai_panel.current_rule
-        if not rule_id:
+        rule_id = self.ai_panel.current_rule_id
+        if rule_id is None:
             from PySide6.QtWidgets import QToolTip
             QToolTip.showText(self.ai_panel.process_selected_btn.mapToGlobal(self.ai_panel.process_selected_btn.rect().center()), "ルールが選択されていません", self)
             return
@@ -150,8 +150,8 @@ class IntegratedExcelUI(QMainWindow):
     
     def process_all(self):
         """すべての行を処理する"""
-        rule_id = self.ai_panel.current_rule
-        if not rule_id:
+        rule_id = self.ai_panel.current_rule_id
+        if rule_id is None:
             from PySide6.QtWidgets import QToolTip
             QToolTip.showText(self.ai_panel.process_all_btn.mapToGlobal(self.ai_panel.process_all_btn.rect().center()), "ルールが選択されていません", self)
             return

@@ -3,10 +3,11 @@ import logging
 from app.services.rule_service import RuleService
 import os, json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                              QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu)
+                              QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu, QDialog)
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from app.ui.rule_edit_dialog import RuleEditDialog
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class AIPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # 初期ルール状態とJSONからの履歴ルールの設定
-        self.current_rule = None
+        self.current_rule_id = None
         self.rule_service = RuleService()
         self.load_rules_from_json()
         self.setup_ui()
@@ -47,11 +48,12 @@ class AIPanel(QWidget):
         self.history_btn.setStyleSheet("color: #000000; background-color: transparent;")
         self.history_btn.setToolTip("過去の履歴からルールを適用します")
         top_layout.addWidget(self.history_btn)
-        # ヒストリールールメニュー設定（モック）
+        # ヒストリールールメニュー設定（IDベース）
         menu = QMenu(self)
-        for rule in self.history_rules:
-            action = menu.addAction(rule)
-            action.triggered.connect(lambda checked, r=rule: self.apply_history_rule(r))
+        for rid in self.history_rules:
+            title = self.rule_map.get(rid, {}).get('title', '')
+            action = menu.addAction(title)
+            action.triggered.connect(lambda checked, rule_id=rid: self.apply_history_rule(rule_id))
         self.history_btn.setMenu(menu)
         self.history_btn.setPopupMode(QToolButton.InstantPopup)
         # 上部レイアウトをパネルに追加
@@ -139,7 +141,7 @@ class AIPanel(QWidget):
         except Exception:
             pass
         self.auto_generate_btn.clicked.connect(self.on_auto_generate)
-        self.rule_detail_btn.clicked.connect(self.show_rule_detail_tooltip)
+        self.rule_detail_btn.clicked.connect(self.show_rule_detail_dialog)
         # 初期UI状態の更新
         self.update_ui_state()
     
@@ -148,14 +150,37 @@ class AIPanel(QWidget):
         QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()), 
                         "自動生成実行中...", self)
     
-    def show_rule_detail_tooltip(self):
-        """ルール詳細ボタン押下時の動作"""
-        QToolTip.showText(self.rule_detail_btn.mapToGlobal(self.rule_detail_btn.rect().center()), 
-                        "ルールの詳細設定画面を開きます", self)
+    def show_rule_detail_dialog(self):
+        """ルール詳細編集ダイアログを表示する"""
+        if self.current_rule_id is None:
+            return
+        rule_data = self.rule_map.get(self.current_rule_id)
+        if not rule_data:
+            logger.error(f"ルールデータが見つかりません id={self.current_rule_id}")
+            return
+        old_title = rule_data.get('title', '')
+        old_prompt = rule_data.get('prompt', '')
+        dlg = RuleEditDialog(self, rule_id=self.current_rule_id, title=old_title, prompt=old_prompt)
+        if dlg.exec() == QDialog.Accepted:
+            new_title, new_prompt = dlg.get_data()
+            success = self.rule_service.update_rule(self.current_rule_id, {'title': new_title, 'prompt': new_prompt})
+            if success:
+                # メニューアイテム更新
+                for act in self.history_btn.menu().actions():
+                    if act.text() == old_title:
+                        act.setText(new_title)
+                        break
+                # ローカルデータ更新
+                self.rule_map[self.current_rule_id]['title'] = new_title
+                self.rule_map[self.current_rule_id]['prompt'] = new_prompt
+                self.update_ui_state()
+                QToolTip.showText(self.rule_detail_btn.mapToGlobal(self.rule_detail_btn.rect().center()), f"ルール「{new_title}」を保存しました", self)
+            else:
+                QToolTip.showText(self.rule_detail_btn.mapToGlobal(self.rule_detail_btn.rect().center()), "ルール更新に失敗しました", self)
     
     def update_ui_state(self):
         """UI要素を現在のルール状態に応じて更新"""
-        if self.current_rule is None:
+        if self.current_rule_id is None:
             logger.debug("現在のルールなし、UIを更新します")
             self.rule_content.setText("ルール未作成")
             # 詳細編集ボタンは非表示にする
@@ -169,8 +194,10 @@ class AIPanel(QWidget):
             self.process_all_btn.setStyleSheet("padding: 5px; background-color: #E0E0E0; color: #A0A0A0; border: 1px solid #CCCCCC;")
             logger.debug("処理ボタンを無効化しました")
         else:
-            logger.debug(f"ルール'{self.current_rule}'適用、UIを更新します")
-            self.rule_content.setText(self.current_rule)
+            # 選択中ルールのタイトルを表示
+            title = self.rule_map.get(self.current_rule_id, {}).get('title', str(self.current_rule_id))
+            logger.debug(f"ルール id={self.current_rule_id} ('{title}') 適用、UIを更新します")
+            self.rule_content.setText(title)
             # 詳細編集ボタンを表示
             self.rule_detail_btn.show()
             # サンプル生成ボタンの文言を変更
@@ -182,15 +209,15 @@ class AIPanel(QWidget):
             self.process_all_btn.setStyleSheet("padding: 5px; background-color: #4F94EF; color: white; border: 1px solid #4F94EF;")
             logger.debug("処理ボタンを有効化しました")
 
-    def apply_history_rule(self, rule):
+    def apply_history_rule(self, rule_id: int):
         """履歴から選択したルールを適用"""
-        logger.debug(f"apply_history_rule called with rule: {rule}")
-        self.current_rule = rule
+        title = self.rule_map.get(rule_id, {}).get('title', '')
+        logger.debug(f"apply_history_rule called with rule_id={rule_id}, title='{title}'")
+        self.current_rule_id = rule_id
         self.update_ui_state()
         QToolTip.showText(self.history_btn.mapToGlobal(self.history_btn.rect().center()), 
-                          f"ルール「{rule}」を適用しました", self)
-        # 選択ルールデータの確認
-        rule_data = self.rule_map.get(rule)
+                          f"ルール「{title}」を適用しました", self)
+        rule_data = self.rule_map.get(rule_id)
         logger.debug(f"rule_data from rule_map: {rule_data}")
         # サンプルデータをロードしてExcelパネルに反映
         if rule_data:
@@ -212,16 +239,18 @@ class AIPanel(QWidget):
         except Exception as e:
             logger.error(f"ルール取得エラー: {e}")
             self.rules_data = []
-        # ルールタイトルのリストとマッピングを作成
-        self.history_rules = [r.get('title', '') for r in self.rules_data]
-        self.rule_map = {r.get('title', ''): r for r in self.rules_data}
-        logger.debug(f"rules_data loaded: {self.rules_data}")
-        logger.debug(f"history_rules keys: {self.history_rules}")
+        # IDベースのリストとマッピングを作成
+        self.history_rules = [r.get('id') for r in self.rules_data]
+        self.rule_map = {r.get('id'): r for r in self.rules_data}
+        logger.debug(f"rules_data loaded: IDs {self.history_rules}")
+        logger.debug(f"rule_map keys: {list(self.rule_map.keys())}")
 
     def on_auto_generate(self):
         """自動生成ボタンで新規ルールを生成し適用"""
         # 処理中メッセージ表示
         self.show_auto_generate_message()
+        # 現在のルールIDを退避
+        old_rule_id = self.current_rule_id
         # サンプルデータ取得
         samples = []
         table = self.excel_panel.sample_table
@@ -257,31 +286,30 @@ class AIPanel(QWidget):
         QApplication.processEvents()
         logger.info(f"ルール生成開始: 入力サンプル数={len(samples)}件")
         try:
-            if self.current_rule is None:
-                # 新規ルール作成
+            # ルール作成 or 再生成
+            if old_rule_id is None:
                 metadata = self.rule_service.create_rule(samples)
             else:
-                # 既存ルール再生成
-                metadata = self.rule_service.regenerate_rule(self.current_rule, samples)
+                metadata = self.rule_service.regenerate_rule(old_rule_id, samples)
+            new_id = metadata.get('id')
             new_title = metadata.get('rule_name')
-            # UIにルール追加または更新
-            if new_title not in self.history_rules:
+            # UIにルールを追加
+            if new_id not in self.history_rules:
                 self.rules_data.append(metadata)
-                self.history_rules.append(new_title)
-                self.rule_map[new_title] = metadata
+                self.history_rules.append(new_id)
+                self.rule_map[new_id] = metadata
                 action = self.history_btn.menu().addAction(new_title)
-                action.triggered.connect(lambda _, r=new_title: self.apply_history_rule(r))
-            # 過去のルールを削除してUIからも消す（再生成時）
-            if self.current_rule and self.current_rule != new_title:
-                # remove old action
+                action.triggered.connect(lambda _, rid=new_id: self.apply_history_rule(rid))
+            # 旧ルールをメニューから削除（再生成時）
+            if old_rule_id is not None and old_rule_id != new_id:
+                old_title = self.rule_map.get(old_rule_id, {}).get('title', '')
                 for act in self.history_btn.menu().actions():
-                    if act.text() == self.current_rule:
+                    if act.text() == old_title:
                         self.history_btn.menu().removeAction(act)
                         break
-            # ルール適用
-            self.apply_history_rule(new_title)
-            # ルール生成完了ログ
-            logger.info(f"ルール生成完了: rule_name={new_title}")
+            # 新ルールを適用
+            self.apply_history_rule(new_id)
+            logger.info(f"ルール生成完了: id={new_id}, title='{new_title}'")
         except NotImplementedError:
             logger.error("create_rule未実装")
             QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),

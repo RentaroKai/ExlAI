@@ -38,6 +38,16 @@ class RuleService:
                     logger.warning(f"Unexpected rules format in {self.rules_path}")
                     self._rules = []
                 logger.debug(f"Loaded rules from {self.rules_path}")
+                # IDマイグレーション: idフィールドがないルールに連番IDを付与
+                needs_save = False
+                for idx, rule in enumerate(self._rules):
+                    if "id" not in rule:
+                        rule["id"] = idx
+                        logger.info(f"Assigned new id={idx} to rule title={rule.get('title')}")
+                        needs_save = True
+                if needs_save:
+                    logger.info("Migrated rules, saving updated rules with IDs.")
+                    self._save_rules()
             except Exception as e:
                 logger.error(f"Failed to load rules: {e}")
                 self._rules = []
@@ -196,30 +206,35 @@ class RuleService:
             "json_format_example": json_format_example,
             "sample_data": sample_data
         }
+        # 新規ID付与
+        existing_ids = [r.get("id", -1) for r in self._rules]
+        new_id = max(existing_ids) + 1 if existing_ids else 0
+        rule_obj["id"] = new_id
+        logger.info(f"Assigned id={new_id} to new rule '{rule_name}'")
         # ローカルファイルに保存
         self._rules.append(rule_obj)
         self._save_rules()
-        logger.info(f"Rule '{rule_name}' created and saved.")
+        logger.info(f"Rule id={new_id} ('{rule_name}') created and saved.")
 
         # 戻り値用メタデータ
         metadata = rule_obj.copy()
-        metadata['rule_name'] = rule_name # rule_nameをメタデータにも追加
+        metadata['rule_name'] = rule_name
         return metadata
 
-    def regenerate_rule(self, rule_id: str, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def regenerate_rule(self, rule_id: int, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         既存ルールを再生成し、更新する
         """
         # 指定ルールを検索
         updated_idx = -1
         for idx, r in enumerate(self._rules):
-            if r.get('title') == rule_id:
+            if r.get("id") == rule_id:
                 updated_idx = idx
                 break
         if updated_idx == -1:
-            raise GeminiAPIError(f"ルール '{rule_id}' が見つかりません")
+            raise GeminiAPIError(f"ルール id={rule_id} が見つかりません")
 
-        logger.info(f"Regenerating rule '{rule_id}'...")
+        logger.info(f"Regenerating rule id={rule_id}...")
         # 新しいサンプルデータでルールを作成 (create_ruleを呼び出す)
         try:
             # create_rule は内部で _save_rules を呼ぶので、ここで古いルールを削除すると
@@ -229,27 +244,27 @@ class RuleService:
 
             # _rules リストから古いルールを削除する
             # create_rule によって要素が追加されているので、インデックスがずれている可能性があるため、
-            # 再度タイトルで検索して削除する方が安全。
-            # ただし、create_ruleが同じ名前のルールを作る可能性があるため、
+            # 再度IDで検索して削除する方が安全。
+            # ただし、create_ruleが同じIDのルールを作る可能性があるため、
             # 事前に見つけておいたインデックス `updated_idx` を使う。
             # 注意: create_rule がリストに追加するため、削除対象は update_idx のまま。
             if 0 <= updated_idx < len(self._rules) -1: # 末尾に追加されたので、それより前にあるはず
                  del self._rules[updated_idx]
                  self._save_rules() # 削除後に再度保存
-                 logger.info(f"Old rule '{rule_id}' removed after regeneration.")
+                 logger.info(f"Old rule id={rule_id} removed after regeneration.")
                  return new_rule_metadata # 新しいルールのメタデータを返す
             else:
                  # ここに来る場合は、何らかの理由で古いルールが見つからなかったか、
                  # リスト操作に問題があった可能性。create_ruleで追加されたものが最新のはず。
-                 logger.warning(f"Could not find the old rule '{rule_id}' at index {updated_idx} after regeneration. The new rule was added.")
+                 logger.warning(f"Could not find the old rule id={rule_id} after regeneration. The new rule was added.")
                  self._save_rules() # 念のため保存
                  return new_rule_metadata
 
 
         except Exception as e:
-            logger.error(f"Error regenerating rule '{rule_id}': {e}")
+            logger.error(f"Error regenerating rule id={rule_id}: {e}")
             # 再生成に失敗した場合、元のルールはそのまま残る
-            raise GeminiAPIError(f"ルール '{rule_id}' の再生成に失敗しました: {e}")
+            raise GeminiAPIError(f"ルール id={rule_id} の再生成に失敗しました: {e}")
 
 
     def get_rules(self) -> List[Dict[str, Any]]:
@@ -262,31 +277,31 @@ class RuleService:
         # 保存時に同期が取れている前提とする。必要であればUI側でリフレッシュを促す。
         return self._rules
 
-    def delete_rule(self, rule_id: str) -> bool:
+    def delete_rule(self, rule_id: int) -> bool:
         """
         指定したrule_idのルールを削除する
         成功時にTrue、失敗時にFalseを返却
         """
         initial_length = len(self._rules)
-        self._rules = [r for r in self._rules if r.get('title') != rule_id]
+        self._rules = [r for r in self._rules if r.get("id") != rule_id]
         if len(self._rules) < initial_length:
             self._save_rules()
-            logger.info(f"Rule '{rule_id}' deleted successfully.")
+            logger.info(f"Rule id={rule_id} deleted successfully.")
             return True
         else:
-            logger.warning(f"削除対象のルール '{rule_id}' が見つかりませんでした")
+            logger.warning(f"削除対象のルール id={rule_id} が見つかりませんでした")
             return False
 
 
-    def apply_rule(self, rule_id: str, inputs: List[str]) -> List[Dict[str, Any]]:
+    def apply_rule(self, rule_id: int, inputs: List[str]) -> List[Dict[str, Any]]:
         """
         指定したルールを入力リストに適用し、結果を返却
         (注: 現在の実装はサンプルデータとの完全一致のみ。将来的にはAI適用が必要)
         """
         # ルールを検索
-        rule = next((r for r in self._rules if r.get('title') == rule_id), None)
+        rule = next((r for r in self._rules if r.get("id") == rule_id), None)
         if not rule:
-            raise GeminiAPIError(f"ルール '{rule_id}' が見つかりません")
+            raise GeminiAPIError(f"ルール id={rule_id} が見つかりません")
 
         sample_data = rule.get('sample_data', {})
         headers = sample_data.get('headers', [])
@@ -294,7 +309,7 @@ class RuleService:
         results = []
 
         if not headers or not rows:
-             logger.warning(f"Rule '{rule_id}' has empty sample_data. Cannot apply rule based on samples.")
+             logger.warning(f"Rule id={rule_id} has empty sample_data. Cannot apply rule based on samples.")
              # サンプルがない場合、全入力に対してエラーを返す
              return [{"input": inp, "output": {}, "status": "error", "error_msg": "ルールにサンプルデータがありません"} for inp in inputs]
 
@@ -304,7 +319,7 @@ class RuleService:
         # ログ: 処理開始
         logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
 
-        logger.info(f"Applying rule '{rule_id}' based on sample matching...")
+        logger.info(f"Applying rule id={rule_id} based on sample matching...")
         for inp in inputs:
             # マッチするサンプル行を検索 (2列目が入力値と一致するか)
             match = next((row for row in rows if len(row) > 1 and row[1] == inp), None)
@@ -316,17 +331,17 @@ class RuleService:
                          if idx -1 < len(match): # 行の長さチェック
                              out[key] = match[idx - 1]
                          else:
-                             logger.warning(f"Index {idx-1} out of bounds for matched row in rule '{rule_id}' for input '{inp}'. Header: '{key}'")
+                             logger.warning(f"Index {idx-1} out of bounds for matched row in rule id={rule_id} for input '{inp}'. Header: '{key}'")
                              out[key] = "" # インデックス外の場合は空文字
 
                     results.append({"input": inp, "output": out, "status": "success"})
                     logger.debug(f"Input '{inp}' matched sample. Output: {out}")
                 except Exception as e:
-                     logger.error(f"Error processing matched row for input '{inp}' in rule '{rule_id}': {e}")
+                     logger.error(f"Error processing matched row for input '{inp}' in rule id={rule_id}: {e}")
                      results.append({"input": inp, "output": {}, "status": "error", "error_msg": f"サンプル処理中にエラー発生: {e}"})
 
             else:
-                logger.debug(f"Input '{inp}' did not match any sample in rule '{rule_id}', calling AI.")
+                logger.debug(f"Input '{inp}' did not match any sample in rule id={rule_id}, calling AI.")
                 # サンプル一致しない場合はAIを呼び出して処理
                 try:
                     # プロンプトの組み立て
@@ -366,3 +381,16 @@ class RuleService:
         error_count = len(results) - success_count
         logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
         return results 
+
+    def update_rule(self, rule_id: int, new_data: Dict[str, Any]) -> bool:
+        """既存ルールのtitleとpromptを更新し保存する"""
+        logger.info(f"Updating rule id={rule_id} with data={new_data}")
+        for r in self._rules:
+            if r.get("id") == rule_id:
+                r["title"] = new_data.get("title", r["title"])
+                r["prompt"] = new_data.get("prompt", r["prompt"])
+                self._save_rules()
+                logger.info(f"Rule id={rule_id} updated successfully.")
+                return True
+        logger.warning(f"Rule id={rule_id} not found for update.")
+        return False 
