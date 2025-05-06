@@ -24,7 +24,7 @@ class AIPanel(QWidget):
     def setup_ui(self):
         """AIパネルのUI設定"""
         # レイアウト設定
-        self.setStyleSheet("background-color: #F5F5F5; color: #000000;")
+        self.setStyleSheet("background-color: #F5F7FA; color: #333333;")  # 背景色をExcelパネルと統一
         ai_layout = QVBoxLayout(self)
         ai_layout.setContentsMargins(15, 15, 15, 15)
         ai_layout.setSpacing(15)  # 均等な余白
@@ -35,7 +35,7 @@ class AIPanel(QWidget):
         # AIパネルタイトル（左上に配置）
         ai_title = QLabel("AI_panel")
         ai_title.setFont(QFont("Arial", 12, QFont.Bold))
-        ai_title.setStyleSheet("color: #000000;")
+        ai_title.setStyleSheet("color: #3A506B;")  # テンプレートラベルと同じ色
         top_layout.addWidget(ai_title)
         
         # 右側にスペースを追加
@@ -45,7 +45,7 @@ class AIPanel(QWidget):
         self.history_btn = QToolButton()
         self.history_btn.setText("📋 履歴")
         self.history_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.history_btn.setStyleSheet("color: #000000; background-color: transparent;")
+        self.history_btn.setStyleSheet("color: #3A506B; background-color: transparent;")
         self.history_btn.setToolTip("過去の履歴からルールを適用します")
         top_layout.addWidget(self.history_btn)
         # ヒストリールールメニュー設定（IDベース）
@@ -62,20 +62,20 @@ class AIPanel(QWidget):
         # 処理ルール表示フレーム
         rule_frame = QFrame()
         rule_frame.setFrameShape(QFrame.StyledPanel)
-        rule_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #DDDDDD;")
+        rule_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D1D9E6;")  # 枠線色を統一
         rule_layout = QVBoxLayout(rule_frame)
         
         # 処理ルールのタイトル
         rule_title = QLabel("処理ルール")
         rule_title.setFont(QFont("Arial", 12, QFont.Bold))
-        rule_title.setStyleSheet("color: #000000;")
+        rule_title.setStyleSheet("color: #3A506B;")  # タイトル色を統一
         rule_layout.addWidget(rule_title)
         
         # ルール内容 - 左寄せにして大きいフォントに変更
         self.rule_content = QLabel("ルール未作成")
         self.rule_content.setAlignment(Qt.AlignLeft)  # 左寄せに変更
         self.rule_content.setFont(QFont("Arial", 14))  # フォントサイズを14に変更
-        self.rule_content.setStyleSheet("color: #000000; padding: 10px;")
+        self.rule_content.setStyleSheet("color: #333333; padding: 10px;")
         rule_layout.addWidget(self.rule_content)
         
         # ルール内ボタンレイアウト
@@ -84,7 +84,7 @@ class AIPanel(QWidget):
         # 自動生成ボタン
         self.auto_generate_btn = QPushButton("テンプレートからルール生成")
         self.auto_generate_btn.setStyleSheet(
-            "background-color: #4F94EF; color: white; font-size: 12px; font-weight: bold; padding: 5px;"
+            "background-color: #4B918B; color: white; font-size: 12px; font-weight: bold; padding: 5px; border-radius: 3px;"  # ティール色に変更
         )
         self.auto_generate_btn.setToolTip("AIがサンプルを解析してルールを自動生成")
         rule_buttons_layout.addWidget(self.auto_generate_btn)
@@ -92,7 +92,7 @@ class AIPanel(QWidget):
         # ルール詳細ボタン
         self.rule_detail_btn = QPushButton("ルール詳細を編集")
         self.rule_detail_btn.setStyleSheet(
-            "background-color: #F0F0F0; color: #000000; font-size: 12px; padding: 5px; border: 1px solid #CCCCCC;"
+            "background-color: #E8EEF4; color: #3A506B; font-size: 12px; padding: 5px; border: 1px solid #D1D9E6; border-radius: 3px;"  # 色を統一
         )
         self.rule_detail_btn.setToolTip("ルールの詳細設定を表示します")
         rule_buttons_layout.addWidget(self.rule_detail_btn)
@@ -100,7 +100,7 @@ class AIPanel(QWidget):
         # ルール削除ボタン
         self.rule_delete_btn = QPushButton("ルールを削除")
         self.rule_delete_btn.setStyleSheet(
-            "background-color: #E74C3C; color: white; font-size: 12px; padding: 5px; border: 1px solid #C0392B;"
+            "background-color: #E74C3C; color: white; font-size: 12px; padding: 5px; border: 1px solid #C0392B; border-radius: 3px;"
         )
         self.rule_delete_btn.setToolTip("選択中のルールを削除します")
         rule_buttons_layout.addWidget(self.rule_delete_btn)
@@ -114,7 +114,7 @@ class AIPanel(QWidget):
         # 処理ボタンのグループ化（QFrameに変更）
         process_frame = QFrame()
         process_frame.setFrameShape(QFrame.StyledPanel)
-        process_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #DDDDDD;")
+        process_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D1D9E6;")  # 枠線色を統一
         process_layout = QVBoxLayout(process_frame)
         process_layout.setContentsMargins(10, 10, 10, 10)
         process_layout.setSpacing(10)
@@ -122,7 +122,7 @@ class AIPanel(QWidget):
         # 処理ルール実行のタイトル（処理ルールのタイトルと同じスタイル）
         process_title = QLabel("処理ルールを実行する")
         process_title.setFont(QFont("Arial", 12, QFont.Bold))
-        process_title.setStyleSheet("color: #000000;")
+        process_title.setStyleSheet("color: #3A506B;")  # タイトル色を統一
         process_layout.addWidget(process_title)
         
         # 処理ボタン
@@ -130,9 +130,10 @@ class AIPanel(QWidget):
         self.process_all_btn = QPushButton("未処理を一括処理")
         
         # ボタンスタイル
-        button_style = "padding: 5px; background-color: #F0F0F0; color: #000000; border: 1px solid #CCCCCC;"
-        self.process_selected_btn.setStyleSheet(button_style)
-        self.process_all_btn.setStyleSheet(button_style)
+        selected_button_style = "padding: 8px; background-color: #5D4A66; color: white; border-radius: 3px; font-weight: bold;"  # データエリアラベルと同じ色
+        all_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色
+        self.process_selected_btn.setStyleSheet(selected_button_style)
+        self.process_all_btn.setStyleSheet(all_button_style)
         
         process_layout.addWidget(self.process_selected_btn)
         process_layout.addWidget(self.process_all_btn)
@@ -201,8 +202,8 @@ class AIPanel(QWidget):
             self.process_selected_btn.setEnabled(False)
             self.process_all_btn.setEnabled(False)
             # 処理ボタンを無効化し、灰色表示
-            self.process_selected_btn.setStyleSheet("padding: 5px; background-color: #E0E0E0; color: #A0A0A0; border: 1px solid #CCCCCC;")
-            self.process_all_btn.setStyleSheet("padding: 5px; background-color: #E0E0E0; color: #A0A0A0; border: 1px solid #CCCCCC;")
+            self.process_selected_btn.setStyleSheet("padding: 8px; background-color: #E0E0E0; color: #A0A0A0; border-radius: 3px;")
+            self.process_all_btn.setStyleSheet("padding: 8px; background-color: #E0E0E0; color: #A0A0A0; border-radius: 3px;")
             logger.debug("処理ボタンを無効化しました")
         else:
             # 選択中ルールのタイトルを表示
@@ -217,9 +218,11 @@ class AIPanel(QWidget):
             self.auto_generate_btn.setText("再生成する")
             self.process_selected_btn.setEnabled(True)
             self.process_all_btn.setEnabled(True)
-            # 処理ボタンを有効化し、色付き表示
-            self.process_selected_btn.setStyleSheet("padding: 5px; background-color: #4F94EF; color: white; border: 1px solid #4F94EF;")
-            self.process_all_btn.setStyleSheet("padding: 5px; background-color: #4F94EF; color: white; border: 1px solid #4F94EF;")
+            # 処理ボタンを有効化し、新しい配色で表示
+            selected_button_style = "padding: 8px; background-color: #5D4A66; color: white; border-radius: 3px; font-weight: bold;"  # データエリアラベルと同じ色
+            all_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色
+            self.process_selected_btn.setStyleSheet(selected_button_style)
+            self.process_all_btn.setStyleSheet(all_button_style)
             logger.debug("処理ボタンを有効化しました")
 
     def apply_history_rule(self, rule_id: int):

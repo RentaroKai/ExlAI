@@ -48,7 +48,7 @@ class BorderDelegate(QStyledItemDelegate):
         text = index.data(Qt.DisplayRole)
         if index.column() == 1 and not text:
             painter.save()
-            pen = QPen(QColor(0, 255, 0))
+            pen = QPen(QColor(75, 145, 139))  # 目に優しい深いティール色
             pen.setWidth(2)
             painter.setPen(pen)
             rect = option.rect.adjusted(1, 1, -1, -1)
@@ -63,7 +63,7 @@ class SampleBorderDelegate(QStyledItemDelegate):
         # ヘッダーの項目名＝???は未入力として緑枠
         if index.row() == 0 and text and "???" in text:
             painter.save()
-            pen = QPen(QColor(0, 255, 0))
+            pen = QPen(QColor(75, 145, 139))  # 目に優しい深いティール色
             pen.setWidth(2)
             painter.setPen(pen)
             rect = option.rect.adjusted(1, 1, -1, -1)
@@ -72,7 +72,7 @@ class SampleBorderDelegate(QStyledItemDelegate):
         # サンプルデータ1行目のA-Bセルが未入力の場合は緑枠 (C列は除外)
         elif index.row() == 1 and index.column() in [1, 2] and not text:
             painter.save()
-            pen = QPen(QColor(0, 255, 0))
+            pen = QPen(QColor(75, 145, 139))  # 目に優しい深いティール色
             pen.setWidth(2)
             painter.setPen(pen)
             rect = option.rect.adjusted(1, 1, -1, -1)
@@ -87,7 +87,7 @@ class ExcelPanel(QWidget):
     def setup_ui(self):
         """エクセルパネルのUI設定"""
         # レイアウト設定
-        self.setStyleSheet("background-color: #FFFFFF;")
+        self.setStyleSheet("background-color: #F5F7FA;")  # より柔らかい背景色
         excel_layout = QVBoxLayout(self)
         excel_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -102,7 +102,7 @@ class ExcelPanel(QWidget):
         # サンプルパネル用ラベル（縦書き）
         sample_label = QLabel("テンプレ｜ト")
         sample_label.setAlignment(Qt.AlignCenter)
-        sample_label.setStyleSheet("background-color: #F0F0F0; border: 1px solid #DDDDDD; padding: 5px; color: #000080; font-weight: bold;")
+        sample_label.setStyleSheet("background-color: #E8EEF4; border: 1px solid #D1D9E6; padding: 5px; color: #3A506B; font-weight: bold;")
         # 縦書きにするために回転
         sample_label.setFixedWidth(25)
         sample_label.setMinimumHeight(120)
@@ -130,7 +130,7 @@ class ExcelPanel(QWidget):
         # 実データ用ラベル（縦書き）
         data_label = QLabel("デ｜タ入力エリア")
         data_label.setAlignment(Qt.AlignCenter)
-        data_label.setStyleSheet("background-color: #F0F0F0; border: 1px solid #DDDDDD; padding: 5px; color: #800000; font-weight: bold;")
+        data_label.setStyleSheet("background-color: #E8EEF4; border: 1px solid #D1D9E6; padding: 5px; color: #5D4A66; font-weight: bold;")
         data_label.setFixedWidth(25)
         data_label.setMinimumHeight(180)
         # 縦書きにする
@@ -167,7 +167,7 @@ class ExcelPanel(QWidget):
         # 状態表示パネル
         status_frame = QFrame()
         status_frame.setFrameShape(QFrame.StyledPanel)
-        status_frame.setStyleSheet("background-color: #F8F8F8; border: 1px solid #DDDDDD;")
+        status_frame.setStyleSheet("background-color: #EFF2F7; border: 1px solid #D1D9E6;")
         status_layout = QHBoxLayout(status_frame)
         
         # 色の説明をシンプルに
@@ -181,7 +181,7 @@ class ExcelPanel(QWidget):
             ("未入力", QColor(255, 255, 255), QColor(0, 0, 0)), 
             ("入力済み", QColor(245, 245, 245), QColor(0, 0, 0)), 
             ("入力不可", QColor(220, 220, 220), QColor(0, 0, 0)), 
-            ("AI入力予定", QColor(220, 255, 220), QColor(0, 0, 0))
+            ("AI入力予定", QColor(231, 245, 241), QColor(0, 0, 0))  # より優しい色合い
         ]
         
         for text, bg_color, text_color in legends:
@@ -191,11 +191,11 @@ class ExcelPanel(QWidget):
             # 未入力は緑枠、それ以外は灰色枠
             if text == "未入力":
                 color_sample.setStyleSheet(
-                    f"background-color: {bg_color.name()}; border: 1px solid #00FF00;"
+                    f"background-color: {bg_color.name()}; border: 1px solid #4B918B;"  # 目に優しい深いティール色
                 )
             else:
                 color_sample.setStyleSheet(
-                    f"background-color: {bg_color.name()}; border: 1px solid #DDDDDD;"
+                    f"background-color: {bg_color.name()}; border: 1px solid #D1D9E6;"  # より柔らかい枠線色
                 )
             
             # テキスト
@@ -275,19 +275,20 @@ class ExcelPanel(QWidget):
         table.setStyleSheet("""
             QTableWidget {
                 background-color: #FFFFFF;
-                color: #000000;
-                gridline-color: #DDDDDD;
+                color: #333333;
+                gridline-color: #D1D9E6;
             }
             QTableWidget::item:selected {
-                background-color: #FFFFE0;
+                background-color: #E8EEF4;
+                color: #3A506B;
             }
             QHeaderView {
-                background-color: #F0F0F0;
+                background-color: #E8EEF4;
             }
             QHeaderView::section {
-                background-color: #F0F0F0;
-                color: #000000;
-                border: 1px solid #DDDDDD;
+                background-color: #E8EEF4;
+                color: #3A506B;
+                border: 1px solid #D1D9E6;
             }
         """)
         table.horizontalHeader().setFixedHeight(30)
