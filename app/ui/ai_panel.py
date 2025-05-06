@@ -79,6 +79,15 @@ class AIPanel(QWidget):
         self.rule_content.setStyleSheet("color: #333333; padding: 10px;")
         rule_layout.addWidget(self.rule_content)
         
+        # ルール名の下にプロンプト用ラベルを追加
+        self.prompt_content = QLabel("")
+        self.prompt_content.setAlignment(Qt.AlignLeft)
+        self.prompt_content.setWordWrap(True)
+        self.prompt_content.setFont(QFont("Arial", 10))
+        self.prompt_content.setStyleSheet("color: #555555; padding: 5px;")
+        self.prompt_content.hide()
+        rule_layout.addWidget(self.prompt_content)
+        
         # ルール内ボタンレイアウト
         rule_buttons_layout = QHBoxLayout()
         
@@ -194,6 +203,8 @@ class AIPanel(QWidget):
         if self.current_rule_id is None:
             logger.debug("現在のルールなし、UIを更新します")
             self.rule_content.setText("ルール未作成")
+            # ルール未生成時はプロンプトを非表示
+            self.prompt_content.hide()
             # 詳細編集ボタンは非表示にする
             self.rule_detail_btn.hide()
             # 削除ボタンも非表示にする
@@ -211,6 +222,10 @@ class AIPanel(QWidget):
             title = self.rule_map.get(self.current_rule_id, {}).get('title', str(self.current_rule_id))
             logger.debug(f"ルール id={self.current_rule_id} ('{title}') 適用、UIを更新します")
             self.rule_content.setText(title)
+            # ルール生成時はプロンプトを設定して表示
+            prompt = self.rule_map.get(self.current_rule_id, {}).get('prompt', '')
+            self.prompt_content.setText(prompt)
+            self.prompt_content.show()
             # 詳細編集ボタンを表示
             self.rule_detail_btn.show()
             # 削除ボタンを表示
