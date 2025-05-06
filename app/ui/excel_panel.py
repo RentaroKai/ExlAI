@@ -146,7 +146,8 @@ class ExcelPanel(QWidget):
         # レイアウト設定
         self.setStyleSheet("background-color: #F5F7FA;")  # より柔らかい背景色
         excel_layout = QVBoxLayout(self)
-        excel_layout.setContentsMargins(0, 0, 0, 0)
+        excel_layout.setContentsMargins(15, 15, 15, 15)
+        excel_layout.setSpacing(15)
         
         # 垂直スプリッター (上下のテーブルを分割するため)
         v_splitter = QSplitter(Qt.Vertical)
