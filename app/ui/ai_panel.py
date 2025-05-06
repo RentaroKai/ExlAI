@@ -80,7 +80,7 @@ class AIPanel(QWidget):
         rule_buttons_layout = QHBoxLayout()
         
         # 自動生成ボタン
-        self.auto_generate_btn = QPushButton("サンプルから生成")
+        self.auto_generate_btn = QPushButton("テンプレートからルール生成")
         self.auto_generate_btn.setStyleSheet(
             "background-color: #4F94EF; color: white; font-size: 12px; font-weight: bold; padding: 5px;"
         )
@@ -161,7 +161,7 @@ class AIPanel(QWidget):
             # 詳細編集ボタンは非表示にする
             self.rule_detail_btn.hide()
             # サンプル生成ボタンはデフォルト文言に戻す
-            self.auto_generate_btn.setText("サンプルから生成")
+            self.auto_generate_btn.setText("テンプレートからルール生成")
             self.process_selected_btn.setEnabled(False)
             self.process_all_btn.setEnabled(False)
             # 処理ボタンを無効化し、灰色表示

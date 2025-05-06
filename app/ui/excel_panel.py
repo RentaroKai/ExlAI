@@ -69,12 +69,49 @@ class ExcelPanel(QWidget):
         # 垂直スプリッター (上下のテーブルを分割するため)
         v_splitter = QSplitter(Qt.Vertical)
         
-        # 上部テーブル (サンプルデータ用)
+        # 上部テーブル (サンプルデータ用) とラベルを横に並べるレイアウト
+        sample_container = QWidget()
+        sample_layout = QHBoxLayout(sample_container)
+        sample_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # サンプルパネル用ラベル（縦書き）
+        sample_label = QLabel("テンプレ｜ト")
+        sample_label.setAlignment(Qt.AlignCenter)
+        sample_label.setStyleSheet("background-color: #F0F0F0; border: 1px solid #DDDDDD; padding: 5px; color: #000080; font-weight: bold;")
+        # 縦書きにするために回転
+        sample_label.setFixedWidth(25)
+        sample_label.setMinimumHeight(120)
+        # 90度回転させて縦書きにする
+        sample_label.setWordWrap(True)
+        vertical_text = "\n".join(list("テンプレ｜ト"))
+        sample_label.setText(vertical_text)
+        
+        # 上部テーブル（サンプルデータ用）
         self.sample_table = CustomTableWidget(4, 12)  # ヘッダー行 + サンプルデータ行3行
         self.sample_table.setHorizontalHeaderLabels(["", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"])
         self.setup_table_style(self.sample_table)
         # サンプルテーブルの未入力セル表示用デリゲート設定
         self.sample_table.setItemDelegate(SampleBorderDelegate(self.sample_table))
+        
+        # ラベルとテーブルを水平レイアウトに追加
+        sample_layout.addWidget(sample_label)
+        sample_layout.addWidget(self.sample_table)
+        
+        # 下部テーブル (実データ用) とラベルを横に並べるレイアウト
+        data_container = QWidget()
+        data_layout = QHBoxLayout(data_container)
+        data_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 実データ用ラベル（縦書き）
+        data_label = QLabel("デ｜タ入力エリア")
+        data_label.setAlignment(Qt.AlignCenter)
+        data_label.setStyleSheet("background-color: #F0F0F0; border: 1px solid #DDDDDD; padding: 5px; color: #800000; font-weight: bold;")
+        data_label.setFixedWidth(25)
+        data_label.setMinimumHeight(180)
+        # 縦書きにする
+        data_label.setWordWrap(True)
+        vertical_text = "\n".join(list("デ｜タ入力エリア"))
+        data_label.setText(vertical_text)
         
         # 下部テーブル (実データ用)
         self.data_table = CustomTableWidget(13, 12)  # 実データ用の行数
@@ -84,9 +121,13 @@ class ExcelPanel(QWidget):
         # A列の未入力セル表示用デリゲート設定
         self.data_table.setItemDelegateForColumn(1, BorderDelegate(self.data_table))
         
-        # スプリッターに上下のテーブルを追加
-        v_splitter.addWidget(self.sample_table)
-        v_splitter.addWidget(self.data_table)
+        # ラベルとテーブルを水平レイアウトに追加
+        data_layout.addWidget(data_label)
+        data_layout.addWidget(self.data_table)
+        
+        # スプリッターに上下のコンテナを追加
+        v_splitter.addWidget(sample_container)
+        v_splitter.addWidget(data_container)
         
         # スプリッターの初期サイズ比率を設定 (上:下 = 3:7)
         v_splitter.setSizes([300, 700])
