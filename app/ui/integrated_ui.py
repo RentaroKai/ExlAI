@@ -160,9 +160,18 @@ class IntegratedExcelUI(QMainWindow):
         # 対象行の抽出 (AI進捗列が空, '未処理', 'エラー')
         rows = []
         for row in range(1, tbl.rowCount()):
+            # AI進捗セルの状態を取得
             item = tbl.item(row, 0)
             status_text = item.text().strip() if item and item.text() else ""
-            if status_text == "" or status_text == "未処理" or status_text == "エラー":
+            # 元の値セルのテキストを取得
+            cell = tbl.item(row, 1)
+            input_text = cell.text().strip() if cell and cell.text() else ""
+            # 元の値セルが空の場合はスキップ
+            if input_text == "":
+                logger.debug(f"process_all: スキップ - row {row} の元の値セルが空です")
+                continue
+            # ステータスが未処理またはエラーの場合のみ処理対象に追加
+            if status_text in ["", "未処理", "エラー"]:
                 rows.append(row)
         if not rows:
             return
