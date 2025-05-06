@@ -140,8 +140,8 @@ class GeminiAPI:
         # タイトル生成用のシステムプロンプト
         self.title_system_prompt = """会議の書き起こしからこの会議のメインとなる議題が何だったのかを教えて。例：取引先とカフェの方向性に関する会議"""
         
-        logger.info(f"GeminiAPI initialized - Transcription model: {self.transcription_model}")
-        logger.info(f"Minutes model: {self.minutes_model}, Title model: {self.title_model}")
+        logger.info(f"GeminiAPI initialized - PromptCreate Model: {self.transcription_model}")
+        logger.info(f"Process model: {self.minutes_model}, Title model: {self.title_model}")
         logger.info(f"Max file size: {self.max_file_size_mb} MB")
 
     def _check_file_size(self, file_path: str) -> None:

@@ -16,9 +16,9 @@ class ConfigDialog(QDialog):
         # モデル設定
         models = config.get('models', {})
         self.trans_edit = QLineEdit(models.get('gemini_transcription', ''))
-        form.addRow("Transcription Model:", self.trans_edit)
+        form.addRow("PromptCreate Model:", self.trans_edit)
         self.minutes_edit = QLineEdit(models.get('gemini_minutes', ''))
-        form.addRow("Minutes Model:", self.minutes_edit)
+        form.addRow("Process model:", self.minutes_edit)
         self.title_edit = QLineEdit(models.get('gemini_title', ''))
         form.addRow("Title Model:", self.title_edit)
 
