@@ -337,8 +337,9 @@ class RuleService:
                     combined_prompt = "\n".join(lines)
                     # 送信プロンプトをログに出力
                     logger.debug(f"送信プロンプト内容:\n{combined_prompt}")
+                    logger.info(f"リアルデータ変換用モデル: {self.gemini.minutes_model} を使用してAI呼び出しを実行")
                     resp = self.gemini.client.models.generate_content(
-                        model=self.gemini.transcription_model,
+                        model=self.gemini.minutes_model,
                         contents=combined_prompt
                     )
                     text = resp.text.strip()
