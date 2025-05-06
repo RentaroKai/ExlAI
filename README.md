@@ -15,7 +15,9 @@
 ### 使い方の手順
 
 1. **アプリを起動する**
-   - `run_app.bat`をダブルクリックするだけです
+    https://github.com/RentaroKai/ExlAI/releases
+    ここから最新のexeをダウンロード
+
 
 2. **テンプレートを作る**
    - 上部の「テンプレート」エリアに例を入力します
@@ -94,6 +96,6 @@ python -m app.ui.integrated_ui
 
 AIモデルの設定は`config.json`で行います。APIキーなどの環境設定を構成できます。
 
-### コントリビューション
 
-プルリクエストは歓迎です。新機能の追加や改善提案は、事前にIssueでディスカッションすることをお勧めします。
+## パッケージング
+pyinstaller --clean ExlAI.spec

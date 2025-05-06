@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, QMessageBox
 from PySide6.QtCore import Qt
 
-from .excel_panel import ExcelPanel
-from .ai_panel import AIPanel
-from .config_dialog import ConfigDialog
+from app.ui.excel_panel import ExcelPanel
+from app.ui.ai_panel import AIPanel
+from app.ui.config_dialog import ConfigDialog
 
 class IntegratedExcelUI(QMainWindow):
     def __init__(self):

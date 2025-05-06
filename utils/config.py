@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import sys
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +21,24 @@ class ConfigManager:
         if hasattr(self, '_initialized') and self._initialized:
             return
         self._initialized = True
-        # デフォルトの設定ファイルパスはプロジェクトルートのconfig.json
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        self.config_path = config_path or os.path.join(base_dir, 'config.json')
+        # exe一体化環境での設定ファイル永続化
+        if getattr(sys, 'frozen', False):
+            exec_dir = os.path.dirname(sys.executable)
+            # パッケージ内に埋め込まれているconfig.json
+            packaged_config = os.path.join(sys._MEIPASS, 'config.json')
+            # 実行ファイルフォルダへの永続化パス
+            persistent_config = os.path.join(exec_dir, 'config.json')
+            if not os.path.exists(persistent_config):
+                try:
+                    shutil.copy(packaged_config, persistent_config)
+                    logger.info(f"Copied default config to {persistent_config}")
+                except Exception as e:
+                    logger.error(f"Failed to copy default config.json: {e}")
+            self.config_path = persistent_config
+        else:
+            # 通常実行時はプロジェクトルートのconfig.jsonを利用
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            self.config_path = config_path or os.path.join(base_dir, 'config.json')
         self._config = {}
         self._load_config()
 

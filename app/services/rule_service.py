@@ -4,6 +4,8 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+import sys
+import shutil
 
 from utils.config import config_manager
 from .gemini_api import GeminiAPI, GeminiAPIError
@@ -16,10 +18,27 @@ class RuleService:
     create_rule / regenerate_rule / get_rules / delete_rule / apply_rule を提供する
     """
     def __init__(self, rules_path: Optional[str] = None):
-        # デフォルトのルールはUI history_rules.jsonを利用
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        default_path = os.path.join(base_dir, 'app', 'ui', 'history_rules.json')
-        self.rules_path = rules_path or default_path
+        # 履歴保存先ファイルパスの設定
+        if getattr(sys, 'frozen', False):
+            # PyInstaller onefile実行環境時: exeと同じフォルダにpersistentに配置
+            exec_dir = os.path.dirname(sys.executable)
+            # パッケージ内のデフォルトファイルパス
+            packaged_rules = os.path.join(sys._MEIPASS, 'history_rules.json')
+            # 永続化用パス
+            persistent_rules = os.path.join(exec_dir, 'history_rules.json')
+            # 初回起動時にコピー
+            if not os.path.exists(persistent_rules):
+                try:
+                    shutil.copy(packaged_rules, persistent_rules)
+                    logger.info(f"Copied default history to {persistent_rules}")
+                except Exception as e:
+                    logger.error(f"Failed to copy default history_rules.json: {e}")
+            self.rules_path = persistent_rules
+        else:
+            # 通常実行時はUIフォルダ内のhistory_rules.jsonを利用
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            default_path = os.path.join(base_dir, 'app', 'ui', 'history_rules.json')
+            self.rules_path = rules_path or default_path
         self._load_rules()
         self.gemini = GeminiAPI()
 
