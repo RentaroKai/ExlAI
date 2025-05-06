@@ -24,7 +24,7 @@ class AIPanel(QWidget):
     def setup_ui(self):
         """AIパネルのUI設定"""
         # レイアウト設定
-        self.setStyleSheet("background-color: #F5F7FA; color: #333333;")  # 背景色をExcelパネルと統一
+        self.setStyleSheet("background-color: #333333; color: #FFFFFF;")  # 背景色をダークグレーに変更
         ai_layout = QVBoxLayout(self)
         ai_layout.setContentsMargins(15, 15, 15, 15)
         ai_layout.setSpacing(15)  # 均等な余白
@@ -46,7 +46,7 @@ class AIPanel(QWidget):
         self.history_btn = QToolButton()
         self.history_btn.setText("📋 履歴")
         self.history_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.history_btn.setStyleSheet("color: #3A506B; background-color: transparent;")
+        self.history_btn.setStyleSheet("color: #3A506B; background-color: transparent; border: none;")
         self.history_btn.setToolTip("過去の履歴からルールを適用します")
         top_layout.addWidget(self.history_btn)
         # ヒストリールールメニュー設定（IDベース）
@@ -57,14 +57,18 @@ class AIPanel(QWidget):
             action.triggered.connect(lambda checked, rule_id=rid: self.apply_history_rule(rule_id))
         self.history_btn.setMenu(menu)
         self.history_btn.setPopupMode(QToolButton.InstantPopup)
-        # 上部レイアウトをパネルに追加
-        ai_layout.addLayout(top_layout)
         
         # 処理ルール表示フレーム
         rule_frame = QFrame()
         rule_frame.setFrameShape(QFrame.StyledPanel)
         rule_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D1D9E6;")  # 枠線色を統一
         rule_layout = QVBoxLayout(rule_frame)
+        
+        # 履歴ボタンを処理ルール枠内に表示
+        history_layout = QHBoxLayout()
+        history_layout.addStretch()
+        history_layout.addWidget(self.history_btn)
+        rule_layout.addLayout(history_layout)
         
         # 処理ルールのタイトル
         rule_title = QLabel("処理ルール")
