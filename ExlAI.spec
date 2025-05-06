@@ -8,8 +8,6 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config.json', '.'),
-        ('doc/img', 'doc/img'),
-        ('doc/sampleScripts', 'doc/sampleScripts'),
         ('app/ui/history_rules.json', '.'),
     ],
     hiddenimports=[],
