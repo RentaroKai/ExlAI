@@ -3,7 +3,7 @@ import logging
 from app.services.rule_service import RuleService
 import os, json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                              QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu, QDialog)
+                              QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu, QDialog, QMessageBox)
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -34,7 +34,7 @@ class AIPanel(QWidget):
         
         # AIパネルタイトル（左上に配置）
         ai_title = QLabel("AI_panel")
-        ai_title.setFont(QFont("Arial", 14, QFont.Bold))
+        ai_title.setFont(QFont("Arial", 12, QFont.Bold))
         ai_title.setStyleSheet("color: #000000;")
         top_layout.addWidget(ai_title)
         
@@ -96,6 +96,14 @@ class AIPanel(QWidget):
         )
         self.rule_detail_btn.setToolTip("ルールの詳細設定を表示します")
         rule_buttons_layout.addWidget(self.rule_detail_btn)
+
+        # ルール削除ボタン
+        self.rule_delete_btn = QPushButton("ルールを削除")
+        self.rule_delete_btn.setStyleSheet(
+            "background-color: #E74C3C; color: white; font-size: 12px; padding: 5px; border: 1px solid #C0392B;"
+        )
+        self.rule_delete_btn.setToolTip("選択中のルールを削除します")
+        rule_buttons_layout.addWidget(self.rule_delete_btn)
         
         # ボタンレイアウトをルールフレームに追加
         rule_layout.addLayout(rule_buttons_layout)
@@ -142,6 +150,7 @@ class AIPanel(QWidget):
             pass
         self.auto_generate_btn.clicked.connect(self.on_auto_generate)
         self.rule_detail_btn.clicked.connect(self.show_rule_detail_dialog)
+        self.rule_delete_btn.clicked.connect(self.delete_current_rule)
         # 初期UI状態の更新
         self.update_ui_state()
     
@@ -185,6 +194,8 @@ class AIPanel(QWidget):
             self.rule_content.setText("ルール未作成")
             # 詳細編集ボタンは非表示にする
             self.rule_detail_btn.hide()
+            # 削除ボタンも非表示にする
+            self.rule_delete_btn.hide()
             # サンプル生成ボタンはデフォルト文言に戻す
             self.auto_generate_btn.setText("テンプレートからルール生成")
             self.process_selected_btn.setEnabled(False)
@@ -200,6 +211,8 @@ class AIPanel(QWidget):
             self.rule_content.setText(title)
             # 詳細編集ボタンを表示
             self.rule_detail_btn.show()
+            # 削除ボタンを表示
+            self.rule_delete_btn.show()
             # サンプル生成ボタンの文言を変更
             self.auto_generate_btn.setText("再生成する")
             self.process_selected_btn.setEnabled(True)
@@ -324,3 +337,48 @@ class AIPanel(QWidget):
             self.rule_detail_btn.setEnabled(True)
             self.history_btn.setEnabled(True)
             QApplication.restoreOverrideCursor()
+
+    def delete_current_rule(self):
+        """選択中のルールを削除する"""
+        if self.current_rule_id is None:
+            logger.debug("delete_current_rule: current_rule_id が None なので何もしない")
+            return
+
+        title = self.rule_map.get(self.current_rule_id, {}).get('title', '')
+        # 確認ダイアログ
+        reply = QMessageBox.question(
+            self,
+            "確認",
+            f"ルール「{title}」を本当に削除しますか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            logger.info(f"ルール削除キャンセル id={self.current_rule_id}")
+            return
+
+        logger.info(f"ルール削除開始 id={self.current_rule_id}")
+        success = self.rule_service.delete_rule(self.current_rule_id)
+        if success:
+            # メニューからアクションを削除
+            for act in self.history_btn.menu().actions():
+                if act.text() == title:
+                    self.history_btn.menu().removeAction(act)
+                    logger.debug(f"メニューアイテム削除: {title}")
+                    break
+            # 内部データも削除
+            self.history_rules.remove(self.current_rule_id)
+            del self.rule_map[self.current_rule_id]
+            # 選択解除・UI更新
+            self.current_rule_id = None
+            self.update_ui_state()
+            QToolTip.showText(
+                self.rule_delete_btn.mapToGlobal(self.rule_delete_btn.rect().center()),
+                "ルールを削除しました", self
+            )
+            logger.info(f"ルール削除完了 id={self.current_rule_id}")
+        else:
+            logger.warning(f"ルール削除失敗 id={self.current_rule_id}")
+            QToolTip.showText(
+                self.rule_delete_btn.mapToGlobal(self.rule_delete_btn.rect().center()),
+                "ルールの削除に失敗しました", self
+            )
