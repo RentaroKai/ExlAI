@@ -4,6 +4,7 @@ from app.services.rule_service import RuleService
 import os, json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                               QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu)
+from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
@@ -248,6 +249,13 @@ class AIPanel(QWidget):
                 output[header] = text
             samples.append({'input': input_item.text(), 'output': output, 'fields': headers[2:]})
         # ルール生成または再生成API呼び出し
+        # UIロックとスピナー表示
+        self.auto_generate_btn.setEnabled(False)
+        self.rule_detail_btn.setEnabled(False)
+        self.history_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+        logger.info(f"ルール生成開始: 入力サンプル数={len(samples)}件")
         try:
             if self.current_rule is None:
                 # 新規ルール作成
@@ -272,6 +280,8 @@ class AIPanel(QWidget):
                         break
             # ルール適用
             self.apply_history_rule(new_title)
+            # ルール生成完了ログ
+            logger.info(f"ルール生成完了: rule_name={new_title}")
         except NotImplementedError:
             logger.error("create_rule未実装")
             QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
@@ -280,3 +290,9 @@ class AIPanel(QWidget):
             logger.error(f"ルール生成エラー: {e}")
             QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
                               f"ルール生成中にエラーが発生しました: {e}", self)
+        finally:
+            # UIロック解除とカーソル復帰
+            self.auto_generate_btn.setEnabled(True)
+            self.rule_detail_btn.setEnabled(True)
+            self.history_btn.setEnabled(True)
+            QApplication.restoreOverrideCursor()
