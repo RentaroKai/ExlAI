@@ -90,7 +90,8 @@ class RuleService:
         # fields に空文字が含まれている場合は除外する
         fields = [f for f in samples[0].get('fields', []) if f] if samples else []
         headers_init = ["AIの進捗", "元の値"] + fields
-        rows_init = [["ルール完成", s.get('input','')] + [s.get('output',{}).get(f,'') for f in fields] for s in samples]
+        # AIの進捗欄は空文字とし、上部パネルでは値を表示しない
+        rows_init = [["", s.get('input','')] + [s.get('output',{}).get(f,'') for f in fields] for s in samples]
         sample_data = {"headers": headers_init, "rows": rows_init}
         logger.debug(f"Generated sample_data: {sample_data}")
 
@@ -223,7 +224,7 @@ class RuleService:
             # create_rule は内部で _save_rules を呼ぶので、ここで古いルールを削除すると
             # 保存タイミングによっては問題が起きる可能性がある。
             # create_rule 成功後に古いものを削除する。
-            new_rule_metadata = self.create_rule(samples) # これが新しいルールをリストの末尾に追加する
+            new_rule_metadata = self.create_rule(samples)
 
             # _rules リストから古いルールを削除する
             # create_rule によって要素が追加されているので、インデックスがずれている可能性があるため、
