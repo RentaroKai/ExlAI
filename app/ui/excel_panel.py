@@ -181,7 +181,7 @@ class ExcelPanel(QWidget):
             ("未入力", QColor(255, 255, 255), QColor(0, 0, 0)), 
             ("入力済み", QColor(245, 245, 245), QColor(0, 0, 0)), 
             ("入力不可", QColor(220, 220, 220), QColor(0, 0, 0)), 
-            ("AI入力予定", QColor(231, 245, 241), QColor(0, 0, 0))  # より優しい色合い
+            ("AI入力予定", QColor(220, 245, 235), QColor(0, 0, 0))  # 青みが強い淡いブルーグリーン
         ]
         
         for text, bg_color, text_color in legends:
@@ -391,7 +391,7 @@ class ExcelPanel(QWidget):
                 elif 2 <= col <= max_item_col:
                     header_item = self.sample_table.item(0, col)
                     if header_item and header_item.text():
-                        item.setBackground(QBrush(QColor(220, 255, 220)))
+                        item.setBackground(QBrush(QColor(220, 245, 235)))  # 青みが強い淡いブルーグリーン
                     else:
                         item.setBackground(QBrush(QColor(220, 220, 220)))
                 else:
@@ -515,7 +515,7 @@ class ExcelPanel(QWidget):
                 elif 2 <= col <= max_item_col:
                     header_item = self.sample_table.item(0, col)
                     if header_item and header_item.text():
-                        item.setBackground(QBrush(QColor(220, 255, 220)))
+                        item.setBackground(QBrush(QColor(220, 245, 235)))  # 青みが強い淡いブルーグリーン
                     else:
                         item.setBackground(QBrush(QColor(220, 220, 220)))
                 # ヘッダー範囲外の列 (未入力)
