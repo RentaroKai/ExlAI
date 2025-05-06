@@ -36,7 +36,7 @@ MANIFEST
 #  Usually these files are written by a CI server
 #  and aren't committed to VCS.
 *.manifest
-*.spec
+
 
 # Installer logs
 pip-log.txt
