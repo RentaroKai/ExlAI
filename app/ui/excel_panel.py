@@ -554,12 +554,14 @@ class ExcelPanel(QWidget):
         # CSV読み込み
         with open(file_path, newline='', encoding='utf-8') as f:
             reader = csv.reader(f)
-            headers = next(reader, [])
+            # CSVヘッダー行は無視し、テンプレートの項目行を使用
+            next(reader, None)
             rows = list(reader)
         # テーブル拡張
         old_r, old_c = self.data_table.rowCount(), self.data_table.columnCount()
         new_r = len(rows) + 1  # ヘッダー行含む
-        new_c = len(headers) + 1  # AI進捗列含む
+        # 列数はテンプレート(sample_table)に合わせる
+        new_c = self.sample_table.columnCount()
         logger.debug(f"Expanding data_table from ({old_r},{old_c}) to ({new_r},{new_c})")
         self.data_table.setRowCount(new_r)
         self.data_table.setColumnCount(new_c)
@@ -590,7 +592,9 @@ class ExcelPanel(QWidget):
             chk = QTableWidgetItem("")
             chk.setTextAlignment(Qt.AlignCenter)
             self.data_table.setItem(r, 0, chk)
-            for c, val in enumerate(row_vals, start=1):
+            # テンプレートの列数に合わせてデータをセット
+            for c in range(1, self.data_table.columnCount()):
+                val = row_vals[c-1] if c-1 < len(row_vals) else ""
                 item = QTableWidgetItem(val)
                 self.data_table.setItem(r, c, item)
 
