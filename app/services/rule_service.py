@@ -119,11 +119,14 @@ class RuleService:
         prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章にまとめること。返答例は別途添付するためここでは端的な表現を心がけること")
         # JSON形式で出力させ、promptキーの値を取得する指示を追加
         prompt_instructions.append("返答はJSON形式で {\"prompt\": \"<プロンプト>\"} のみを返し、他の文言を含めないでください。")
+        # AIに送信するプロンプト全文をログ出力する
+        prompt_content = "\n".join(prompt_instructions)
+        logger.info(f"★aiに送った全文だよ★\n{prompt_content}")
         try:
             logger.info("Generating rule prompt via Gemini API (JSON format)...")
             resp1 = self.gemini.client.models.generate_content(
                 model=self.gemini.transcription_model,
-                contents="\n".join(prompt_instructions)
+                contents=prompt_content
             )
             text = resp1.text.strip()
             # コードブロックや余分な記号を除去
@@ -156,36 +159,34 @@ class RuleService:
             "返答は {\"rule_name\": \"<ルール名>\"} の形式で JSON のみを返し、他の文言を含めないでください。",
             f"命令文: {rule_prompt}"
         ]
+        # AIに送信するタイトル生成用プロンプト全文をログ出力する
+        title_content = "\n".join(title_instructions)
+        logger.info(f"★aiに送った全文だよ★\n{title_content}")
+        logger.info("Generating rule title via Gemini API...")
+        resp3 = self.gemini.client.models.generate_content(
+            model=self.gemini.title_model,
+            contents=title_content
+        )
+        # JSONパースして rule_name を取得
+        text = resp3.text.strip()
+        # コードブロックやバッククオートを除去
+        if text.startswith("```"):
+            # ```json や ``` コードブロックマーカーを削除
+            text = re.sub(r"```(?:json)?\\n?", "", text)
+            text = text.rstrip("`\\n ") # 末尾のバッククオート、改行、スペースを削除
+        # JSON部分を抽出
+        start = text.find("{")
+        end = text.rfind("}")
+        json_str = text[start:end+1] if start != -1 and end != -1 else text
         try:
-            logger.info("Generating rule title via Gemini API...")
-            resp3 = self.gemini.client.models.generate_content(
-                model=self.gemini.title_model,
-                contents="\n".join(title_instructions)
-            )
-            # JSONパースして rule_name を取得
-            text = resp3.text.strip()
-            # コードブロックやバッククオートを除去
-            if text.startswith("```"):
-                # ```json や ``` コードブロックマーカーを削除
-                text = re.sub(r"```(?:json)?\\n?", "", text)
-                text = text.rstrip("`\\n ") # 末尾のバッククオート、改行、スペースを削除
-            # JSON部分を抽出
-            start = text.find("{")
-            end = text.rfind("}")
-            json_str = text[start:end+1] if start != -1 and end != -1 else text
-            try:
-                data = json.loads(json_str)
-                rule_name = data.get("rule_name", "").strip()
-                logger.info(f"Generated rule title: {rule_name}")
-            except Exception as e:
-                logger.error(f"タイトルJSONパースエラー: {e}, raw text: '{text}'")
-                # フォールバックで生テキストをタイトルとして使用
-                rule_name = text if text else f"ルール生成 {now}" # 空文字の場合はデフォルト名
-                logger.warning(f"Using raw text or default as title: {rule_name}")
+            data = json.loads(json_str)
+            rule_name = data.get("rule_name", "").strip()
+            logger.info(f"Generated rule title: {rule_name}")
         except Exception as e:
-            logger.error(f"タイトル生成エラー: {e}")
-            rule_name = f"ルール生成 {now}"
-            logger.warning(f"Using default title due to generation error: {rule_name}")
+            logger.error(f"タイトルJSONパースエラー: {e}, raw text: '{text}'")
+            # フォールバックで生テキストをタイトルとして使用
+            rule_name = text if text else f"ルール生成 {now}" # 空文字の場合はデフォルト名
+            logger.warning(f"Using raw text or default as title: {rule_name}")
 
 
         # --- ルールオブジェクト作成・保存 ---
