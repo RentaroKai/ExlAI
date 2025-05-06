@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 class CustomTableWidget(QTableWidget):
     def __init__(self, rows, cols, parent=None):
         super().__init__(rows, cols, parent)
+        # 右クリックメニューでコピー・ペーストを可能にする
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QMenu
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.open_context_menu)
         
     def setVerticalHeaderLabels(self, labels):
         for i, label in enumerate(labels):
@@ -41,6 +46,58 @@ class CustomTableWidget(QTableWidget):
                     self.setItem(cur_r + dr, cur_c + dc, QTableWidgetItem(val))
             return
         super().keyPressEvent(event)
+
+    def open_context_menu(self, position):
+        """右クリックメニューを表示し、コピー・ペーストを提供する"""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        copy_act = menu.addAction("コピー")
+        paste_act = menu.addAction("ペースト")
+        action = menu.exec(self.viewport().mapToGlobal(position))
+        if action == copy_act:
+            logger.debug("ContextMenu: コピー選択")
+            self.copy_selection()
+        elif action == paste_act:
+            logger.debug("ContextMenu: ペースト選択")
+            self.paste_clipboard()
+
+    def copy_selection(self):
+        """選択セルの内容をクリップボードにコピーする"""
+        from PySide6.QtWidgets import QApplication
+        ranges = self.selectedRanges()
+        if not ranges:
+            return
+        rng = ranges[0]
+        copied_rows = []
+        for row in range(rng.topRow(), rng.bottomRow() + 1):
+            cells = []
+            for col in range(rng.leftColumn(), rng.rightColumn() + 1):
+                item = self.item(row, col)
+                cells.append(item.text() if item and item.text() else "")
+            copied_rows.append("\t".join(cells))
+        QApplication.clipboard().setText("\n".join(copied_rows))
+
+    def paste_clipboard(self):
+        """クリップボードのテキストを現在の位置にペーストし、必要に応じてテーブルを拡張する"""
+        from PySide6.QtWidgets import QApplication, QTableWidgetItem
+        text = QApplication.clipboard().text()
+        if not text:
+            return
+        rows = text.splitlines()
+        max_cols = max(len(r.split('\t')) for r in rows)
+        cur_r = max(self.currentRow(), 0)
+        cur_c = max(self.currentColumn(), 0)
+        need_rows = cur_r + len(rows) - self.rowCount()
+        need_cols = cur_c + max_cols - self.columnCount()
+        if need_rows > 0 or need_cols > 0:
+            new_r = self.rowCount() + max(need_rows, 0)
+            new_c = self.columnCount() + max(need_cols, 0)
+            logger.debug(f"ContextMenuでのペーストに伴うサイズ変更: ({self.rowCount()},{self.columnCount()}) -> ({new_r},{new_c})")
+            self.setRowCount(new_r)
+            self.setColumnCount(new_c)
+        for dr, line in enumerate(rows):
+            for dc, val in enumerate(line.split('\t')):
+                self.setItem(cur_r + dr, cur_c + dc, QTableWidgetItem(val))
 
 class BorderDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
