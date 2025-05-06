@@ -37,6 +37,7 @@ class AIPanel(QWidget):
         ai_title.setFont(QFont("Arial", 12, QFont.Bold))
         ai_title.setStyleSheet("color: #3A506B;")  # テンプレートラベルと同じ色
         top_layout.addWidget(ai_title)
+        ai_title.hide()
         
         # 右側にスペースを追加
         top_layout.addStretch()
@@ -130,7 +131,7 @@ class AIPanel(QWidget):
         self.process_all_btn = QPushButton("未処理を一括処理")
         
         # ボタンスタイル
-        selected_button_style = "padding: 8px; background-color: #5D4A66; color: white; border-radius: 3px; font-weight: bold;"  # データエリアラベルと同じ色
+        selected_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色に変更
         all_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色
         self.process_selected_btn.setStyleSheet(selected_button_style)
         self.process_all_btn.setStyleSheet(all_button_style)
@@ -219,7 +220,7 @@ class AIPanel(QWidget):
             self.process_selected_btn.setEnabled(True)
             self.process_all_btn.setEnabled(True)
             # 処理ボタンを有効化し、新しい配色で表示
-            selected_button_style = "padding: 8px; background-color: #5D4A66; color: white; border-radius: 3px; font-weight: bold;"  # データエリアラベルと同じ色
+            selected_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色に変更
             all_button_style = "padding: 8px; background-color: #4B918B; color: white; border-radius: 3px; font-weight: bold;"  # ティール色
             self.process_selected_btn.setStyleSheet(selected_button_style)
             self.process_all_btn.setStyleSheet(all_button_style)
