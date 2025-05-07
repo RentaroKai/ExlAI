@@ -186,14 +186,14 @@ class ExcelPanel(QWidget):
         data_layout.setContentsMargins(0, 0, 0, 0)
         
         # 実データ用ラベル（縦書き）
-        data_label = QLabel("デ｜タ入力エリア")
+        data_label = QLabel("処理エリア")
         data_label.setAlignment(Qt.AlignCenter)
         data_label.setStyleSheet("background-color: #E8EEF4; border: 1px solid #D1D9E6; padding: 5px; color: #5D4A66; font-weight: bold;")
         data_label.setFixedWidth(25)
         data_label.setMinimumHeight(180)
         # 縦書きにする
         data_label.setWordWrap(True)
-        vertical_text = "\n".join(list("デ｜タ入力エリア"))
+        vertical_text = "\n".join(list("処理エリア"))
         data_label.setText(vertical_text)
         
         # 下部テーブル (実データ用)

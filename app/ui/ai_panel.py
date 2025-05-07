@@ -61,8 +61,11 @@ class AIPanel(QWidget):
         # 処理ルール表示フレーム
         rule_frame = QFrame()
         rule_frame.setFrameShape(QFrame.StyledPanel)
-        rule_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D1D9E6;")  # 枠線色を統一
+        rule_frame.setStyleSheet("background-color: #FFFFFF; border: none;")  # 枠線を非表示にする
         rule_layout = QVBoxLayout(rule_frame)
+        # rule_layoutのマージンとスペーシングを統一
+        rule_layout.setContentsMargins(10, 10, 10, 10)
+        rule_layout.setSpacing(10)
         
         # 履歴ボタンを処理ルール枠内に表示
         history_layout = QHBoxLayout()
@@ -80,7 +83,8 @@ class AIPanel(QWidget):
         self.rule_content = QLabel("ルール未作成")
         self.rule_content.setAlignment(Qt.AlignLeft)  # 左寄せに変更
         self.rule_content.setFont(QFont("Arial", 14))  # フォントサイズを14に変更
-        self.rule_content.setStyleSheet("color: #333333; padding: 10px;")
+        # 水平方向の余白をなくし、垂直パディングのみ確保
+        self.rule_content.setStyleSheet("color: #333333; padding: 10px 0px;")
         rule_layout.addWidget(self.rule_content)
         
         # ルール名の下にプロンプト用ラベルを追加
@@ -128,7 +132,7 @@ class AIPanel(QWidget):
         # 処理ボタンのグループ化（QFrameに変更）
         process_frame = QFrame()
         process_frame.setFrameShape(QFrame.StyledPanel)
-        process_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #D1D9E6;")  # 枠線色を統一
+        process_frame.setStyleSheet("background-color: #FFFFFF; border: none;")  # 枠線を非表示にする
         process_layout = QVBoxLayout(process_frame)
         process_layout.setContentsMargins(10, 10, 10, 10)
         process_layout.setSpacing(10)
