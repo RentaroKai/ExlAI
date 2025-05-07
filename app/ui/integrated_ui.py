@@ -18,6 +18,8 @@ from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
 from app.ui.config_dialog import ConfigDialog
 
+BACKUP_CSV_NAME = 'last_processed.csv'
+
 class IntegratedExcelUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -32,6 +34,10 @@ class IntegratedExcelUI(QMainWindow):
         load_csv_act.triggered.connect(self.load_csv)
         save_csv_act = file_menu.addAction("CSV保存")
         save_csv_act.triggered.connect(self.save_csv)
+        # バックアップCSV開くアクション追加
+        file_menu.addSeparator()
+        open_last_act = file_menu.addAction("最後に処理したファイルを開く（バックアップ）")
+        open_last_act.triggered.connect(self.open_backup)
         settings_menu = menubar.addMenu("設定")
         config_act = settings_menu.addAction("環境設定")
         config_act.triggered.connect(self.open_config_dialog)
@@ -132,6 +138,14 @@ class IntegratedExcelUI(QMainWindow):
             success_count = sum(1 for r in results if r.get('status') == 'success')
             error_count = len(results) - success_count
             logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
+            # バックアップCSVを保存
+            try:
+                base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(sys.argv[0]))
+                backup_path = os.path.join(base_dir, BACKUP_CSV_NAME)
+                self.excel_panel.save_csv(backup_path)
+                logger.info(f"バックアップ保存完了: {backup_path}")
+            except Exception as e:
+                logger.error(f"バックアップ保存エラー: {e}")
         except Exception as e:
             logger.error(f"apply_rule 中断: {e}")
             # 例外ダイアログ表示
@@ -215,6 +229,14 @@ class IntegratedExcelUI(QMainWindow):
             success_count = sum(1 for r in results if r.get('status') == 'success')
             error_count = len(results) - success_count
             logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
+            # バックアップCSVを保存
+            try:
+                base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(sys.argv[0]))
+                backup_path = os.path.join(base_dir, BACKUP_CSV_NAME)
+                self.excel_panel.save_csv(backup_path)
+                logger.info(f"バックアップ保存完了: {backup_path}")
+            except Exception as e:
+                logger.error(f"バックアップ保存エラー: {e}")
         except Exception as e:
             logger.error(f"apply_rule 中断: {e}")
             # 例外ダイアログ表示
@@ -255,6 +277,30 @@ class IntegratedExcelUI(QMainWindow):
         """設定ダイアログを開く"""
         dlg = ConfigDialog(self)
         dlg.exec()
+
+    # バックアップCSVを開く
+    def open_backup(self):
+        """最後に処理したCSVバックアップファイルを開く"""
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        backup_path = os.path.join(base_dir, BACKUP_CSV_NAME)
+        if os.path.exists(backup_path):
+            try:
+                logger.info(f"バックアップファイルを開く: {backup_path}")
+                os.startfile(backup_path)
+            except Exception as e:
+                logger.error(f"バックアップファイルのオープンエラー: {e}")
+                msg = QMessageBox(self)
+                msg.setWindowTitle("エラー")
+                msg.setText("バックアップファイルを開くことができませんでした")
+                msg.exec()
+        else:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("ファイルが見つかりません")
+            msg.setText("バックアップファイルが存在しません")
+            msg.exec()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
