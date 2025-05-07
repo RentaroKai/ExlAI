@@ -26,8 +26,8 @@ class AIPanel(QWidget):
         # レイアウト設定
         self.setStyleSheet("background-color: #333333; color: #FFFFFF;")  # 背景色をダークグレーに変更
         ai_layout = QVBoxLayout(self)
-        ai_layout.setContentsMargins(15, 15, 15, 15)
-        ai_layout.setSpacing(15)  # 均等な余白
+        ai_layout.setContentsMargins(5, 5, 5, 15)
+        ai_layout.setSpacing(5)  # 均等な余白
         
         # AIパネルタイトルとボタンを含む上部レイアウト
         top_layout = QHBoxLayout()
