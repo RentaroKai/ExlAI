@@ -67,6 +67,30 @@ class RuleService:
                 if needs_save:
                     logger.info("Migrated rules, saving updated rules with IDs.")
                     self._save_rules()
+
+                # --- 追加: stray 'rule_name' キーの削除と重複IDのクリーンアップ ---
+                cleanup_save = False
+                # 'rule_name' フィールドがあれば削除
+                for rule in self._rules:
+                    if 'rule_name' in rule:
+                        del rule['rule_name']
+                        logger.info(f"Removed stray 'rule_name' from rule id={rule.get('id')}")
+                        cleanup_save = True
+                # 重複IDのルールを除外
+                seen_ids = set()
+                unique_rules = []
+                for rule in self._rules:
+                    rid = rule.get('id')
+                    if rid in seen_ids:
+                        logger.warning(f"Duplicate rule id={rid} detected and removed")
+                        cleanup_save = True
+                        continue
+                    seen_ids.add(rid)
+                    unique_rules.append(rule)
+                self._rules = unique_rules
+                if cleanup_save:
+                    logger.info("Cleaned up stray fields and duplicates, saving rules.")
+                    self._save_rules()
             except Exception as e:
                 logger.error(f"Failed to load rules: {e}")
                 self._rules = []
@@ -253,32 +277,31 @@ class RuleService:
         if updated_idx == -1:
             raise GeminiAPIError(f"ルール id={rule_id} が見つかりません")
 
+        # 追加: regenerate_rule開始時のデバッグログ
+        logger.debug(f"Starting regenerate_rule: rule_id={rule_id}, updated_idx={updated_idx}, current_ids={[r.get('id') for r in self._rules]}")
         logger.info(f"Regenerating rule id={rule_id}...")
         # 新しいサンプルデータでルールを作成 (create_ruleを呼び出す)
         try:
-            # create_rule は内部で _save_rules を呼ぶので、ここで古いルールを削除すると
-            # 保存タイミングによっては問題が起きる可能性がある。
-            # create_rule 成功後に古いものを削除する。
             new_rule_metadata = self.create_rule(samples)
+            # 追加: create_rule後のデバッグログ
+            logger.debug(f"After create_rule: metadata returned={new_rule_metadata}")
+            logger.debug(f"Current rule IDs after create: {[r.get('id') for r in self._rules]}")
 
-            # _rules リストから古いルールを削除する
-            # create_rule によって要素が追加されているので、インデックスがずれている可能性があるため、
-            # 再度IDで検索して削除する方が安全。
-            # ただし、create_ruleが同じIDのルールを作る可能性があるため、
-            # 事前に見つけておいたインデックス `updated_idx` を使う。
-            # 注意: create_rule がリストに追加するため、削除対象は update_idx のまま。
             if 0 <= updated_idx < len(self._rules) -1: # 末尾に追加されたので、それより前にあるはず
+                 # 追加: 古いルール削除前のデバッグログ
+                 logger.debug(f"Deleting old rule at index={updated_idx}, id={rule_id}")
                  del self._rules[updated_idx]
-                 self._save_rules() # 削除後に再度保存
+                 # 追加: 古いルール削除後のデバッグログ
+                 logger.debug(f"Rule IDs after deletion: {[r.get('id') for r in self._rules]}")
+                 self._save_rules()  # 削除後に再度保存
                  logger.info(f"Old rule id={rule_id} removed after regeneration.")
-                 return new_rule_metadata # 新しいルールのメタデータを返す
+                 return new_rule_metadata  # 新しいルールのメタデータを返す
             else:
-                 # ここに来る場合は、何らかの理由で古いルールが見つからなかったか、
-                 # リスト操作に問題があった可能性。create_ruleで追加されたものが最新のはず。
-                 logger.warning(f"Could not find the old rule id={rule_id} after regeneration. The new rule was added.")
-                 self._save_rules() # 念のため保存
+                 # 追加: 想定外パス時のデバッグログ
+                 logger.warning(f"Could not delete old rule id={rule_id}, unexpected updated_idx={updated_idx} with current length={len(self._rules)}")
+                 logger.debug(f"Rules remain unchanged: {[r.get('id') for r in self._rules]}")
+                 self._save_rules()  # 念のため保存
                  return new_rule_metadata
-
 
         except Exception as e:
             logger.error(f"Error regenerating rule id={rule_id}: {e}")
