@@ -12,7 +12,8 @@ logging.getLogger().addHandler(file_handler)
 logging.getLogger().setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, QMessageBox
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 
 from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
@@ -41,6 +42,10 @@ class IntegratedExcelUI(QMainWindow):
         settings_menu = menubar.addMenu("設定")
         config_act = settings_menu.addAction("環境設定")
         config_act.triggered.connect(self.open_config_dialog)
+        # ヘルプメニューにGitHubリンクを追加
+        help_menu = menubar.addMenu("ヘルプ")
+        help_act = help_menu.addAction("GitHub リポジトリ")
+        help_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/RentaroKai/ExlAI")))
         
         # メインウィジェット
         central_widget = QWidget()
