@@ -38,7 +38,7 @@ class IntegratedExcelUI(QMainWindow):
         
         # メインウィジェット
         central_widget = QWidget()
-        central_widget.setStyleSheet("background-color: #cceedd; color: #333333;")
+        central_widget.setStyleSheet("background-color: #cccfcf; color: #333333;")
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
