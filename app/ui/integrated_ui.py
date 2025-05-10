@@ -18,6 +18,7 @@ from PySide6.QtGui import QDesktopServices
 from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
 from app.ui.config_dialog import ConfigDialog
+from app.ui.help_dialog import HelpDialog
 
 BACKUP_CSV_NAME = 'last_processed.csv'
 
@@ -42,10 +43,10 @@ class IntegratedExcelUI(QMainWindow):
         settings_menu = menubar.addMenu("設定")
         config_act = settings_menu.addAction("環境設定")
         config_act.triggered.connect(self.open_config_dialog)
-        # ヘルプメニューにGitHubリンクを追加
+        # ヘルプメニューの変更
         help_menu = menubar.addMenu("ヘルプ")
-        help_act = help_menu.addAction("GitHub リポジトリ")
-        help_act.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/RentaroKai/ExlAI")))
+        help_act = help_menu.addAction("使い方ガイド")
+        help_act.triggered.connect(self.open_help_dialog)
         
         # メインウィジェット
         central_widget = QWidget()
@@ -282,6 +283,11 @@ class IntegratedExcelUI(QMainWindow):
         """設定ダイアログを開く"""
         dlg = ConfigDialog(self)
         dlg.exec()
+
+    def open_help_dialog(self):
+        """ヘルプダイアログを表示する"""
+        dialog = HelpDialog(self)
+        dialog.exec()
 
     # バックアップCSVを開く
     def open_backup(self):
