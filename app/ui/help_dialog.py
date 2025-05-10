@@ -85,7 +85,7 @@ class HelpDialog(QDialog):
             "1. **アプリを起動する**\n"
             "   - ExlAI.exeをダブルクリックして起動します\n\n"
             "2. **Gemini APIの無料APIキーを取得する**\n"
-            "   - https://aistudio.google.com/app/apikey にアクセスして無料のAPIキーを作成できます\n"
+            "   - <a href=\"https://aistudio.google.com/app/apikey\">https://aistudio.google.com/app/apikey</a> にアクセスして無料のAPIキーを作成できます\n"
             "   - 作成したAPIキーはアプリの「設定」メニューから入力してください\n\n"
             "3. **テンプレートを作成する**\n"
             "   - 上部の「テンプレート」エリアに例を入力します\n"
@@ -105,6 +105,8 @@ class HelpDialog(QDialog):
             "   - 保存先を指定すれば完了です\n"
             "   - 最後に処理したデータは自動的にCSV形式でバックアップされており、メニューからいつでも開くことができます"
         )
+        steps_text.setTextFormat(Qt.RichText)
+        steps_text.setOpenExternalLinks(True)
         steps_text.setWordWrap(True)
         steps_layout.addWidget(steps_text)
         steps_group.setLayout(steps_layout)

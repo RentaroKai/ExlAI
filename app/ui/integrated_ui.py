@@ -12,8 +12,7 @@ logging.getLogger().addHandler(file_handler)
 logging.getLogger().setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, QMessageBox
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt
 
 from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
