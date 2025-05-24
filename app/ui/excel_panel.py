@@ -1,12 +1,16 @@
 import sys
 import logging
+import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                               QTableWidgetItem, QFrame, QLabel, QSplitter,
-                              QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QColor, QBrush, QPen, QKeySequence
+                              QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider, QMessageBox)
+from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtGui import QFont, QColor, QBrush, QPen, QKeySequence, QDragEnterEvent, QDropEvent
 
 logger = logging.getLogger(__name__)
+
+# ProcessModeクラスをインポート
+from app.services.rule_service import ProcessMode
 
 class CustomTableWidget(QTableWidget):
     def __init__(self, rows, cols, parent=None):
@@ -136,9 +140,123 @@ class SampleBorderDelegate(QStyledItemDelegate):
             painter.drawRect(rect)
             painter.restore()
 
+# ドラッグ&ドロップ対応のカスタムラベル
+class DropAreaLabel(QLabel):
+    def __init__(self, parent=None, target_table="data"):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("""
+            QLabel {
+                border: 2px dashed #CCCCCC;
+                border-radius: 10px;
+                background-color: #F8F9FA;
+                color: #666666;
+                font-size: 12px;
+                padding: 20px;
+                margin: 5px;
+            }
+            QLabel:hover {
+                border-color: #4B918B;
+                background-color: #E8F4F8;
+            }
+        """)
+        self.setText("ファイルをここにドラッグ&ドロップ\n対応形式: JPG, PNG, MP4")
+        self.setMinimumHeight(80)
+        self.parent_panel = parent
+        self.target_table = target_table  # "sample" または "data"
+        
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """ドラッグ開始時の処理"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """ドロップ時の処理"""
+        urls = event.mimeData().urls()
+        if not urls:
+            logger.warning("No URLs found in drop event")
+            event.ignore()
+            return
+            
+        if not self.parent_panel:
+            logger.error("Parent panel not available for file drop")
+            event.ignore()
+            return
+            
+        logger.info(f"Processing {len(urls)} dropped files for {self.target_table} table")
+        
+        file_paths = []
+        invalid_files = []
+        large_files = []
+        
+        for url in urls:
+            file_path = url.toLocalFile()
+            logger.debug(f"Processing dropped file: {file_path}")
+            
+            # ファイル存在チェック
+            if not os.path.exists(file_path):
+                invalid_files.append(f"{os.path.basename(file_path)} (ファイルが見つかりません)")
+                continue
+            
+            # ファイルサイズチェック
+            try:
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                if file_size_mb > 100:  # 100MB制限
+                    large_files.append(f"{os.path.basename(file_path)} ({file_size_mb:.1f}MB)")
+                    continue
+            except Exception as e:
+                logger.warning(f"Failed to check file size for {file_path}: {e}")
+            
+            # ファイル拡張子チェック
+            if self.is_valid_file_format(file_path):
+                file_paths.append(file_path)
+                logger.debug(f"Valid file added: {os.path.basename(file_path)}")
+            else:
+                invalid_files.append(f"{os.path.basename(file_path)} (対応していない形式)")
+        
+        # エラーメッセージの表示
+        error_messages = []
+        if invalid_files:
+            error_messages.append(f"無効なファイル: {', '.join(invalid_files)}")
+        if large_files:
+            error_messages.append(f"ファイルサイズが大きすぎます: {', '.join(large_files)}")
+        
+        if error_messages:
+            QMessageBox.warning(
+                self.parent_panel, 
+                "ファイル処理エラー", 
+                "\n".join(error_messages) + "\n\n対応形式: JPG, PNG, MP4\n最大サイズ: 100MB"
+            )
+        
+        # 有効なファイルがある場合は処理を実行
+        if file_paths:
+            try:
+                self.parent_panel.add_file_paths_to_table(file_paths, self.target_table)
+                logger.info(f"Successfully processed {len(file_paths)} files for {self.target_table} table")
+            except Exception as e:
+                logger.error(f"Failed to add file paths to table: {e}")
+                QMessageBox.critical(
+                    self.parent_panel,
+                    "ファイル追加エラー", 
+                    f"ファイルの追加中にエラーが発生しました:\n{str(e)}"
+                )
+        
+        event.acceptProposedAction()
+    
+    def is_valid_file_format(self, file_path: str) -> bool:
+        """ファイル形式が有効かチェック"""
+        valid_extensions = {'.jpg', '.jpeg', '.png', '.mp4'}
+        _, ext = os.path.splitext(file_path.lower())
+        return ext in valid_extensions
+
 class ExcelPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.current_mode = ProcessMode.NORMAL  # 現在のモード
+        self.drop_areas = {}  # ドラッグ&ドロップエリアを格納
         self.setup_ui()
         
     def setup_ui(self):
@@ -176,9 +294,21 @@ class ExcelPanel(QWidget):
         # サンプルテーブルの未入力セル表示用デリゲート設定
         self.sample_table.setItemDelegate(SampleBorderDelegate(self.sample_table))
         
+        # サンプル用のドラッグ&ドロップエリアを作成（初期は非表示）
+        self.sample_drop_area = DropAreaLabel(self, target_table="sample")
+        self.sample_drop_area.hide()
+        self.drop_areas['sample'] = self.sample_drop_area
+        
+        # サンプルエリア用の縦レイアウト
+        sample_table_layout = QVBoxLayout()
+        sample_table_layout.addWidget(self.sample_table)
+        sample_table_layout.addWidget(self.sample_drop_area)
+        sample_table_widget = QWidget()
+        sample_table_widget.setLayout(sample_table_layout)
+        
         # ラベルとテーブルを水平レイアウトに追加
         sample_layout.addWidget(sample_label)
-        sample_layout.addWidget(self.sample_table)
+        sample_layout.addWidget(sample_table_widget)
         
         # 下部テーブル (実データ用) とラベルを横に並べるレイアウト
         data_container = QWidget()
@@ -198,16 +328,26 @@ class ExcelPanel(QWidget):
         
         # 下部テーブル (実データ用)
         self.data_table = CustomTableWidget(13, 12)  # 実データ用の行数
-        # 横ヘッダーをA-Kまで設定
         self.data_table.setHorizontalHeaderLabels(["", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"])
-        # テーブルスタイルを適用
         self.setup_table_style(self.data_table)
-        # 元の値列の未入力セル表示用デリゲート設定
-        self.data_table.setItemDelegateForColumn(1, BorderDelegate(self.data_table))
+        # 実データテーブルの「元の値」欄が未入力の場合の境界線表示
+        self.data_table.setItemDelegate(BorderDelegate(self.data_table))
+        
+        # 実データ用のドラッグ&ドロップエリアを作成（初期は非表示）
+        self.data_drop_area = DropAreaLabel(self, target_table="data")
+        self.data_drop_area.hide()
+        self.drop_areas['data'] = self.data_drop_area
+        
+        # 実データエリア用の縦レイアウト
+        data_table_layout = QVBoxLayout()
+        data_table_layout.addWidget(self.data_table)
+        data_table_layout.addWidget(self.data_drop_area)
+        data_table_widget = QWidget()
+        data_table_widget.setLayout(data_table_layout)
         
         # ラベルとテーブルを水平レイアウトに追加
         data_layout.addWidget(data_label)
-        data_layout.addWidget(self.data_table)
+        data_layout.addWidget(data_table_widget)
         
         # スプリッターに上下のコンテナを追加
         v_splitter.addWidget(sample_container)
@@ -675,3 +815,111 @@ class ExcelPanel(QWidget):
                     item = self.data_table.item(row, c)
                     row_vals.append(item.text() if item else '')
                 writer.writerow(row_vals)
+
+    def on_mode_changed(self, new_mode: str):
+        """モード変更時の処理"""
+        logger.info(f"ExcelPanel: Mode changed from {self.current_mode} to {new_mode}")
+        self.current_mode = new_mode
+        
+        # ドラッグ&ドロップエリアの表示/非表示切替
+        if new_mode in [ProcessMode.IMAGE, ProcessMode.VIDEO]:
+            # 画像・動画モードの場合はドラッグ&ドロップエリアを表示
+            self.sample_drop_area.show()
+            self.data_drop_area.show()
+            
+            # モードに応じてラベルテキストを更新
+            if new_mode == ProcessMode.IMAGE:
+                sample_text = "📸 画像ファイルをドラッグ&ドロップ\n（テンプレート用）\n対応形式: JPG, PNG"
+                data_text = "📸 画像ファイルをドラッグ&ドロップ\n（処理用）\n対応形式: JPG, PNG"
+            else:  # VIDEO
+                sample_text = "🎬 動画ファイルをドラッグ&ドロップ\n（テンプレート用）\n対応形式: MP4"
+                data_text = "🎬 動画ファイルをドラッグ&ドロップ\n（処理用）\n対応形式: MP4"
+            
+            self.sample_drop_area.setText(sample_text)
+            self.data_drop_area.setText(data_text)
+            
+            # ドラッグ&ドロップエリアのスタイルを微調整
+            enhanced_style = """
+                QLabel {
+                    border: 2px dashed #4B918B;
+                    border-radius: 10px;
+                    background-color: #F0F8FF;
+                    color: #2C5F5D;
+                    font-size: 11px;
+                    font-weight: bold;
+                    padding: 15px;
+                    margin: 5px;
+                }
+                QLabel:hover {
+                    border-color: #2C5F5D;
+                    background-color: #E8F6F8;
+                    color: #1A4A48;
+                }
+            """
+            self.sample_drop_area.setStyleSheet(enhanced_style)
+            self.data_drop_area.setStyleSheet(enhanced_style)
+            
+            logger.info(f"ExcelPanel: Drag&Drop areas shown for {new_mode} mode with enhanced styling")
+        else:
+            # テキストモードの場合はドラッグ&ドロップエリアを非表示
+            self.sample_drop_area.hide()
+            self.data_drop_area.hide()
+            logger.info(f"ExcelPanel: Drag&Drop areas hidden for {new_mode} mode")
+    
+    def add_file_paths_to_table(self, file_paths: list, target_table: str = "data"):
+        """ドラッグ&ドロップされたファイルパスをテーブルに追加"""
+        # target_tableに基づいて対象テーブルを決定
+        if target_table == "sample":
+            table = self.sample_table
+            table_name = "テンプレート"
+        else:
+            table = self.data_table
+            table_name = "処理エリア"
+        
+        current_row = 1  # ヘッダー行をスキップ
+        
+        # 既存データの最後の行を見つける
+        while current_row < table.rowCount():
+            item = table.item(current_row, 1)  # "元の値"列
+            if not item or not item.text().strip():
+                break
+            current_row += 1
+        
+        # ファイルパスを追加
+        for file_path in file_paths:
+            if current_row >= table.rowCount():
+                # テーブルに行が足りない場合は行を追加
+                table.insertRow(table.rowCount())
+                logger.debug(f"Added new row to {table_name}: {table.rowCount()}")
+            
+            # "元の値"列にファイルパスを設定
+            path_item = QTableWidgetItem(file_path)
+            table.setItem(current_row, 1, path_item)
+            
+            # AI進捗列を"未処理"に設定
+            status_item = QTableWidgetItem("未処理")
+            status_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(current_row, 0, status_item)
+            
+            logger.info(f"Added file path to {table_name} row {current_row}: {os.path.basename(file_path)}")
+            current_row += 1
+        
+        # ファイル追加完了メッセージ
+        file_details = []
+        for file_path in file_paths:
+            file_name = os.path.basename(file_path)
+            try:
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                file_details.append(f"• {file_name} ({file_size_mb:.1f}MB)")
+            except:
+                file_details.append(f"• {file_name}")
+        
+        success_message = f"✅ {len(file_paths)}個のファイルを{table_name}に追加しました。\n\n"
+        success_message += "\n".join(file_details)
+        
+        if len(file_details) <= 5:
+            message_content = success_message
+        else:
+            message_content = f"✅ {len(file_paths)}個のファイルを{table_name}に追加しました。"
+        
+        QMessageBox.information(self, "ファイル追加完了", message_content)

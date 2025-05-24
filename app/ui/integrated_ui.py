@@ -11,8 +11,11 @@ file_handler.setFormatter(formatter)
 logging.getLogger().addHandler(file_handler)
 logging.getLogger().setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, QMessageBox
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QSplitter, 
+                              QMessageBox, QVBoxLayout, QRadioButton, QButtonGroup, QLabel, QFrame,
+                              QSizePolicy)
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
@@ -22,11 +25,21 @@ from app.workers import AIWorker
 
 BACKUP_CSV_NAME = 'last_processed.csv'
 
+class ProcessMode:
+    """処理モード定義"""
+    NORMAL = "normal"      # テキスト処理
+    IMAGE = "image"        # 画像処理  
+    VIDEO = "video"        # 動画処理
+
 class IntegratedExcelUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("AIエクセル - 統合UI")
         self.setGeometry(100, 100, 1300, 700)
+        
+        # 現在のモード
+        self.current_mode = ProcessMode.NORMAL
+        
         # メニューバーの作成
         menubar = self.menuBar()
         file_menu = menubar.addMenu("ファイル")
@@ -52,8 +65,15 @@ class IntegratedExcelUI(QMainWindow):
         central_widget = QWidget()
         central_widget.setStyleSheet("background-color: #dadfdd; color: #333333;")
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
+        
+        # モード選択UIの作成
+        self.create_mode_selection_ui(main_layout)
+        
+        # コンテンツエリアのレイアウト
+        content_layout = QHBoxLayout()
         
         # スプリッター (左右の領域を区切るためのもの)
         h_splitter = QSplitter(Qt.Horizontal)
@@ -73,14 +93,95 @@ class IntegratedExcelUI(QMainWindow):
         # 水平スプリッターの初期サイズ比率を設定（左:右 = 7:3）
         h_splitter.setSizes([700, 300])
         
-        # メインレイアウトにスプリッターを追加
-        main_layout.addWidget(h_splitter)
+        # コンテンツレイアウトにスプリッターを追加
+        content_layout.addWidget(h_splitter)
+        
+        # メインレイアウトにコンテンツレイアウトを追加（ストレッチファクター1で拡張可能）
+        main_layout.addLayout(content_layout, 1)
         
         # パネル間の連携を設定
         self.connect_panels()
         
         # ワーカースレッド用変数の初期化
         self.ai_worker = None
+    
+    def create_mode_selection_ui(self, parent_layout):
+        """モード選択UIを作成"""
+        # モード選択フレーム
+        mode_frame = QFrame()
+        mode_frame.setFrameShape(QFrame.StyledPanel)
+        mode_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #CCCCCC; border-radius: 5px;")
+        
+        # フレームの高さを固定し、縮小しないよう設定
+        mode_frame.setFixedHeight(50)  # 高さを50pxに固定
+        mode_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 垂直方向のサイズポリシーを固定に設定
+        
+        mode_layout = QHBoxLayout(mode_frame)
+        mode_layout.setContentsMargins(15, 10, 15, 10)
+        mode_layout.setSpacing(20)
+        
+        # モード選択ラベル
+        mode_label = QLabel("処理モード:")
+        mode_label.setFont(QFont("Arial", 12, QFont.Bold))
+        mode_label.setStyleSheet("color: #333333; border: none;")
+        mode_layout.addWidget(mode_label)
+        
+        # ラジオボタングループの作成
+        self.mode_button_group = QButtonGroup()
+        
+        # テキスト処理ラジオボタン
+        self.normal_radio = QRadioButton("テキスト処理")
+        self.normal_radio.setChecked(True)  # デフォルトで選択
+        self.normal_radio.setFont(QFont("Arial", 10))
+        self.normal_radio.setStyleSheet("color: #333333; border: none;")
+        
+        # 画像処理ラジオボタン
+        self.image_radio = QRadioButton("画像処理")
+        self.image_radio.setFont(QFont("Arial", 10))
+        self.image_radio.setStyleSheet("color: #333333; border: none;")
+        
+        # 動画処理ラジオボタン
+        self.video_radio = QRadioButton("動画処理")
+        self.video_radio.setFont(QFont("Arial", 10))
+        self.video_radio.setStyleSheet("color: #333333; border: none;")
+        
+        # ラジオボタンをグループに追加
+        self.mode_button_group.addButton(self.normal_radio, 0)
+        self.mode_button_group.addButton(self.image_radio, 1)
+        self.mode_button_group.addButton(self.video_radio, 2)
+        
+        # モード切替時のイベント接続
+        self.mode_button_group.buttonClicked.connect(self.on_mode_changed)
+        
+        # レイアウトに追加
+        mode_layout.addWidget(self.normal_radio)
+        mode_layout.addWidget(self.image_radio)
+        mode_layout.addWidget(self.video_radio)
+        mode_layout.addStretch()  # 右側にスペースを追加
+        
+        # 親レイアウトに追加（ストレッチファクター0で固定サイズ）
+        parent_layout.addWidget(mode_frame, 0)
+    
+    def on_mode_changed(self, button):
+        """モード変更時の処理"""
+        button_id = self.mode_button_group.id(button)
+        if button_id == 0:
+            self.current_mode = ProcessMode.NORMAL
+            logger.info("モード変更: テキスト処理")
+        elif button_id == 1:
+            self.current_mode = ProcessMode.IMAGE
+            logger.info("モード変更: 画像処理")
+        elif button_id == 2:
+            self.current_mode = ProcessMode.VIDEO
+            logger.info("モード変更: 動画処理")
+        
+        # モード変更をAIパネルに通知（今後の実装で使用）
+        if hasattr(self.ai_panel, 'on_mode_changed'):
+            self.ai_panel.on_mode_changed(self.current_mode)
+        
+        # モード変更をExcelパネルに通知（今後の実装で使用）
+        if hasattr(self.excel_panel, 'on_mode_changed'):
+            self.excel_panel.on_mode_changed(self.current_mode)
     
     def connect_panels(self):
         """左側パネルと右側パネル間の連携を設定"""
@@ -96,36 +197,58 @@ class IntegratedExcelUI(QMainWindow):
             from PySide6.QtWidgets import QToolTip
             QToolTip.showText(self.ai_panel.process_selected_btn.mapToGlobal(self.ai_panel.process_selected_btn.rect().center()), "ルールが選択されていません", self)
             return
+            
+        # 選択されたルールの情報を取得
+        selected_rule = next((r for r in self.ai_panel.rule_service.get_rules() if r.get('id') == rule_id), None)
+        rule_mode = selected_rule.get('mode', 'normal') if selected_rule else 'normal'
+        
         # 処理対象テーブルを判定
         if self.excel_panel.sample_table.hasFocus():
             active_table = self.excel_panel.sample_table
         else:
             active_table = self.excel_panel.data_table
+            
         # 選択行取得
         selected_items = active_table.selectedItems()
         rows = sorted({item.row() for item in selected_items if item.row() > 0})
         if not rows:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "選択なし", "処理する行を選択してください。")
             return
+            
         # 入力文字列リスト作成
         inputs = []
         for row in rows:
             item = active_table.item(row, 1)
             inputs.append(item.text() if item and item.text() else "")
+        
         # 処理前に進捗を「処理中」に設定
         from PySide6.QtWidgets import QTableWidgetItem
         for row in rows:
             in_progress = QTableWidgetItem("処理中")
             in_progress.setTextAlignment(Qt.AlignCenter)
             active_table.setItem(row, 0, in_progress)
+            
         # UI更新を強制
         QApplication.processEvents()
+        
+        # モード別の処理メッセージ
+        if rule_mode == 'image':
+            processing_msg = f"画像解析処理を開始しています... ({len(inputs)}件)"
+        elif rule_mode == 'video':
+            processing_msg = f"動画解析処理を開始しています... ({len(inputs)}件)"
+        else:
+            processing_msg = f"テキスト処理を開始しています... ({len(inputs)}件)"
+            
+        logger.info(processing_msg)
+        
         # UIロック表示
         self.ai_panel.process_selected_btn.setEnabled(False)
         self.ai_panel.process_all_btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         
         # ワーカースレッドでAI処理を実行
-        logger.info(f"process_selected 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        logger.info(f"process_selected 開始: rule_id={rule_id} mode={rule_mode} 対象行数={len(inputs)}件")
         self.ai_worker = AIWorker(self.ai_panel.rule_service, rule_id, inputs)
         
         # 処理完了とエラーハンドリングのシグナル接続

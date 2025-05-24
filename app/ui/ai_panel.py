@@ -1,6 +1,6 @@
 import sys
 import logging
-from app.services.rule_service import RuleService
+from app.services.rule_service import RuleService, ProcessMode
 import os, json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                               QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu, QDialog, QMessageBox)
@@ -17,6 +17,7 @@ class AIPanel(QWidget):
         super().__init__(parent)
         # 初期ルール状態とJSONからの履歴ルールの設定
         self.current_rule_id = None
+        self.current_mode = ProcessMode.NORMAL  # 現在のモード
         self.rule_service = RuleService()
         self.load_rules_from_json()
         self.setup_ui()
@@ -50,13 +51,7 @@ class AIPanel(QWidget):
         self.history_btn.setToolTip("過去の履歴からルールを適用します")
         top_layout.addWidget(self.history_btn)
         # ヒストリールールメニュー設定（IDベース）
-        menu = QMenu(self)
-        for rid in self.history_rules:
-            title = self.rule_map.get(rid, {}).get('title', '')
-            action = menu.addAction(title)
-            action.triggered.connect(lambda checked, rule_id=rid: self.apply_history_rule(rule_id))
-        self.history_btn.setMenu(menu)
-        self.history_btn.setPopupMode(QToolButton.InstantPopup)
+        self.create_history_menu()
         
         # 処理ルール表示フレーム
         rule_frame = QFrame()
@@ -162,16 +157,52 @@ class AIPanel(QWidget):
         ai_layout.addStretch()
         
         # イベント接続
-        # JSON の最初のルールを適用する
+        # 既存の接続を安全に解除
         try:
             self.auto_generate_btn.clicked.disconnect()
-        except Exception:
+        except (TypeError, RuntimeError, AttributeError):
+            # 接続がない場合やオブジェクトが無効な場合のエラーを無視
             pass
+        
+        # 新しい接続を設定
         self.auto_generate_btn.clicked.connect(self.on_auto_generate)
         self.rule_detail_btn.clicked.connect(self.show_rule_detail_dialog)
         self.rule_delete_btn.clicked.connect(self.delete_current_rule)
         # 初期UI状態の更新
         self.update_ui_state()
+    
+    def create_history_menu(self):
+        """履歴メニューを作成（モード別フィルタリング）"""
+        menu = QMenu(self)
+        # 現在のモードのルールのみを表示
+        filtered_rules = self.rule_service.get_rules(self.current_mode)
+        for rule in filtered_rules:
+            rule_id = rule.get('id')
+            title = rule.get('title', '')
+            if rule_id is not None:
+                action = menu.addAction(title)
+                action.triggered.connect(lambda checked, rid=rule_id: self.apply_history_rule(rid))
+        
+        self.history_btn.setMenu(menu)
+        self.history_btn.setPopupMode(QToolButton.InstantPopup)
+    
+    def on_mode_changed(self, new_mode: str):
+        """モード変更時の処理"""
+        logger.info(f"AIPanel: Mode changed from {self.current_mode} to {new_mode}")
+        self.current_mode = new_mode
+        
+        # 履歴メニューを更新（新しいモードのルールのみ表示）
+        self.create_history_menu()
+        
+        # 現在選択中のルールが新しいモードに対応していない場合はクリア
+        if self.current_rule_id is not None:
+            current_rule = next((r for r in self.rule_service.get_rules() if r.get('id') == self.current_rule_id), None)
+            if current_rule and current_rule.get('mode', ProcessMode.NORMAL) != new_mode:
+                logger.info(f"Current rule mode mismatch, clearing rule selection")
+                self.current_rule_id = None
+                self.update_ui_state()
+        
+        logger.info(f"AIPanel mode change completed for mode: {new_mode}")
     
     def show_auto_generate_message(self):
         """自動生成ボタン押下時の動作"""
@@ -326,11 +357,11 @@ class AIPanel(QWidget):
         QApplication.processEvents()
         logger.info(f"ルール生成開始: 入力サンプル数={len(samples)}件")
         try:
-            # ルール作成 or 再生成
+            # ルール作成 or 再生成（現在のモードを渡す）
             if old_rule_id is None:
-                metadata = self.rule_service.create_rule(samples)
+                metadata = self.rule_service.create_rule(samples, self.current_mode)
             else:
-                metadata = self.rule_service.regenerate_rule(old_rule_id, samples)
+                metadata = self.rule_service.regenerate_rule(old_rule_id, samples, self.current_mode)
             new_id = metadata.get('id')
             new_title = metadata.get('rule_name')
             # UIにルールを追加
@@ -338,18 +369,15 @@ class AIPanel(QWidget):
                 self.rules_data.append(metadata)
                 self.history_rules.append(new_id)
                 self.rule_map[new_id] = metadata
-                action = self.history_btn.menu().addAction(new_title)
-                action.triggered.connect(lambda _, rid=new_id: self.apply_history_rule(rid))
+                # 履歴メニューを再構築（モード別フィルタリング適用）
+                self.create_history_menu()
             # 旧ルールをメニューから削除（再生成時）
             if old_rule_id is not None and old_rule_id != new_id:
-                old_title = self.rule_map.get(old_rule_id, {}).get('title', '')
-                for act in self.history_btn.menu().actions():
-                    if act.text() == old_title:
-                        self.history_btn.menu().removeAction(act)
-                        break
+                # 履歴メニューを再構築（削除されたルールは自動的に除外される）
+                self.create_history_menu()
             # 新ルールを適用
             self.apply_history_rule(new_id)
-            logger.info(f"ルール生成完了: id={new_id}, title='{new_title}'")
+            logger.info(f"ルール生成完了: id={new_id}, title='{new_title}', mode={self.current_mode}")
         except NotImplementedError:
             logger.error("create_rule未実装")
             QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
@@ -386,15 +414,11 @@ class AIPanel(QWidget):
         logger.info(f"ルール削除開始 id={self.current_rule_id}")
         success = self.rule_service.delete_rule(self.current_rule_id)
         if success:
-            # メニューからアクションを削除
-            for act in self.history_btn.menu().actions():
-                if act.text() == title:
-                    self.history_btn.menu().removeAction(act)
-                    logger.debug(f"メニューアイテム削除: {title}")
-                    break
             # 内部データも削除
             self.history_rules.remove(self.current_rule_id)
             del self.rule_map[self.current_rule_id]
+            # 履歴メニューを再構築（削除されたルールは自動的に除外される）
+            self.create_history_menu()
             # 選択解除・UI更新
             self.current_rule_id = None
             self.update_ui_state()
@@ -402,7 +426,7 @@ class AIPanel(QWidget):
                 self.rule_delete_btn.mapToGlobal(self.rule_delete_btn.rect().center()),
                 "ルールを削除しました", self
             )
-            logger.info(f"ルール削除完了 id={self.current_rule_id}")
+            logger.info(f"ルール削除完了")
         else:
             logger.warning(f"ルール削除失敗 id={self.current_rule_id}")
             QToolTip.showText(

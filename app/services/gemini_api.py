@@ -27,6 +27,7 @@ class MediaType:
     """サポートされるメディアタイプの定数"""
     AUDIO = "audio"
     VIDEO = "video"
+    IMAGE = "image"
 
 class GeminiAPIError(Exception):
     """Gemini API処理中のエラーを表すカスタム例外"""
@@ -118,6 +119,24 @@ class GeminiAPI:
             "response_mime_type": "text/plain",
         }
         
+        # 画像解析用の設定
+        self.image_analysis_config = {
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 4096,
+            "response_mime_type": "text/plain",
+        }
+        
+        # 動画解析用の設定
+        self.video_analysis_config = {
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 8192,
+            "response_mime_type": "text/plain",
+        }
+        
         # システムプロンプト（互換性のため）
         self.system_prompt = """あなたは会議の書き起こしを行う専門家です。
     以下の点に注意して、音声ファイルに忠実な書き起こしテキストを作成してください：
@@ -201,12 +220,45 @@ class GeminiAPI:
 
     def wait_for_processing(self, file) -> bool:
         """ファイルの処理完了を待機"""
-        for attempt in range(MAX_FILE_WAIT_RETRIES):
-            status = self.client.files.get(file.uri).state
-            logger.info(f"File processing status: {status}")
-            if status == types.File.State.ACTIVE:
-                return True
-            time.sleep(FILE_WAIT_RETRY_DELAY)
+        # 画像ファイルの場合は待機時間を短縮
+        max_retries = 10  # 30回から10回に短縮
+        retry_delay = 2   # 5秒から2秒に短縮
+        
+        for attempt in range(max_retries):
+            try:
+                # ファイルの状態を取得
+                file_status = self.client.files.get(name=file.name)
+                state_value = file_status.state
+                
+                # 状態を詳細にログ出力
+                logger.debug(f"File processing attempt {attempt + 1}/{max_retries}: {state_value} (type: {type(state_value)})")
+                
+                # 様々な形式での状態確認
+                state_str = str(state_value).upper()
+                if "ACTIVE" in state_str:
+                    logger.info(f"File processing completed: {state_value}")
+                    return True
+                    
+                # 失敗状態もチェック
+                if "FAILED" in state_str or "ERROR" in state_str:
+                    logger.error(f"File processing failed with state: {state_value}")
+                    return False
+                
+                # 処理中状態のログ
+                if "PROCESSING" in state_str or "PENDING" in state_str:
+                    logger.debug(f"File still processing: {state_value}")
+                    
+                time.sleep(retry_delay)
+                
+            except Exception as e:
+                logger.warning(f"Failed to get file status (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"Failed to get file status after {max_retries} attempts")
+                    # 最後の試行では処理を続行する（画像がアップロード済みなら使える可能性）
+                    logger.info("Attempting to proceed with uploaded file despite status check failure")
+                    return True
+                time.sleep(retry_delay)
+        
         return False
 
     def transcribe(
@@ -264,4 +316,184 @@ class GeminiAPI:
             return response.text
         except Exception as e:
             logger.error(f"議事録要約エラー: {e}")
-            return "" 
+            return ""
+
+    def analyze_image(self, file_path: str, prompt: str) -> str:
+        """画像を解析してテキストを生成する
+        
+        Args:
+            file_path (str): 解析する画像ファイルのパス
+            prompt (str): 解析の指示プロンプト
+            
+        Returns:
+            str: 解析結果のテキスト
+            
+        Raises:
+            GeminiAPIError: 解析に失敗した場合
+        """
+        try:
+            logger.info(f"Starting image analysis: {os.path.basename(file_path)}")
+            start_time = time.time()
+            
+            # ファイルサイズのチェック
+            self._check_file_size(file_path)
+            
+            # 画像ファイルをアップロード
+            logger.info(f"Uploading image for analysis: {file_path}")
+            uploaded_file = self.client.files.upload(file=file_path)
+            logger.info(f"Image uploaded successfully: {uploaded_file.uri}")
+            upload_time = time.time() - start_time
+            logger.debug(f"Upload completed in {upload_time:.2f} seconds")
+            
+            # ファイル処理の完了を待機
+            if not self.wait_for_processing(uploaded_file):
+                raise GeminiAPIError("画像ファイルの処理が完了しませんでした")
+            
+            # 画像解析の実行 (最新APIでは uploaded_file を直接 contents に渡す)
+            analysis_start = time.time()
+            response = self.client.models.generate_content(
+                model=self.transcription_model,
+                contents=[prompt, uploaded_file],
+                config=types.GenerateContentConfig(
+                    temperature=self.image_analysis_config["temperature"],
+                    top_p=self.image_analysis_config["top_p"],
+                    top_k=self.image_analysis_config["top_k"],
+                    max_output_tokens=self.image_analysis_config["max_output_tokens"],
+                )
+            )
+            analysis_time = time.time() - analysis_start
+            logger.debug(f"Image analysis completed in {analysis_time:.2f} seconds")
+            
+            # ファイルを削除（オプション：リソース節約のため）
+            try:
+                self.client.files.delete(name=uploaded_file.name)
+                logger.info(f"Temporary image file deleted: {uploaded_file.name}")
+            except Exception as e:
+                logger.warning(f"Failed to delete temporary file: {e}")
+            
+            result = response.text
+            total_time = time.time() - start_time
+            logger.info(f"Image analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
+            return result
+            
+        except FileNotFoundError as e:
+            error_msg = f"画像ファイルが見つかりません: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+        except VideoFileTooLargeError as e:
+            error_msg = f"画像ファイルサイズエラー: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+        except Exception as e:
+            error_msg = f"画像解析に失敗しました: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+
+    def analyze_video(self, file_path: str, prompt: str) -> str:
+        """動画を解析してテキストを生成する
+        
+        Args:
+            file_path (str): 解析する動画ファイルのパス
+            prompt (str): 解析の指示プロンプト
+            
+        Returns:
+            str: 解析結果のテキスト
+            
+        Raises:
+            GeminiAPIError: 解析に失敗した場合
+        """
+        try:
+            logger.info(f"Starting video analysis: {os.path.basename(file_path)}")
+            start_time = time.time()
+            
+            # ファイルサイズのチェック
+            self._check_file_size(file_path)
+            
+            # 動画ファイルをアップロード
+            logger.info(f"Uploading video for analysis: {file_path}")
+            uploaded_file = self.client.files.upload(file=file_path)
+            logger.info(f"Video uploaded successfully: {uploaded_file.uri}")
+            upload_time = time.time() - start_time
+            logger.debug(f"Upload completed in {upload_time:.2f} seconds")
+            
+            # ファイル処理の完了を待機（動画は時間がかかる場合があります）
+            logger.info("Waiting for video processing to complete...")
+            if not self.wait_for_processing(uploaded_file):
+                raise GeminiAPIError("動画ファイルの処理が完了しませんでした")
+            
+            processing_time = time.time() - start_time
+            logger.debug(f"Video processing completed in {processing_time:.2f} seconds")
+            
+            # 動画解析の実行 (最新APIでは uploaded_file を直接 contents に渡す)
+            analysis_start = time.time()
+            response = self.client.models.generate_content(
+                model=self.transcription_model,
+                contents=[prompt, uploaded_file],
+                config=types.GenerateContentConfig(
+                    temperature=self.video_analysis_config["temperature"],
+                    top_p=self.video_analysis_config["top_p"],
+                    top_k=self.video_analysis_config["top_k"],
+                    max_output_tokens=self.video_analysis_config["max_output_tokens"],
+                )
+            )
+            analysis_time = time.time() - analysis_start
+            logger.debug(f"Video analysis completed in {analysis_time:.2f} seconds")
+            
+            # ファイルを削除（オプション：リソース節約のため）
+            try:
+                self.client.files.delete(name=uploaded_file.name)
+                logger.info(f"Temporary video file deleted: {uploaded_file.name}")
+            except Exception as e:
+                logger.warning(f"Failed to delete temporary file: {e}")
+            
+            result = response.text
+            total_time = time.time() - start_time
+            logger.info(f"Video analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
+            return result
+            
+        except FileNotFoundError as e:
+            error_msg = f"動画ファイルが見つかりません: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+        except VideoFileTooLargeError as e:
+            error_msg = f"動画ファイルサイズエラー: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+        except Exception as e:
+            error_msg = f"動画解析に失敗しました: {str(e)}"
+            logger.error(error_msg)
+            raise GeminiAPIError(error_msg)
+
+    def analyze_media(self, file_path: str, prompt: str, media_type: str = None) -> str:
+        """メディアファイル（画像・動画）を解析してテキストを生成する汎用メソッド
+        
+        Args:
+            file_path (str): 解析するメディアファイルのパス
+            prompt (str): 解析の指示プロンプト
+            media_type (str, optional): メディアタイプ ("image" or "video")
+                                       Noneの場合は拡張子から自動判定
+            
+        Returns:
+            str: 解析結果のテキスト
+            
+        Raises:
+            GeminiAPIError: 解析に失敗した場合
+            ValueError: サポートされていないファイル形式の場合
+        """
+        # メディアタイプの自動判定
+        if media_type is None:
+            file_ext = Path(file_path).suffix.lower()
+            if file_ext in ['.jpg', '.jpeg', '.png']:
+                media_type = MediaType.IMAGE
+            elif file_ext in ['.mp4']:
+                media_type = MediaType.VIDEO
+            else:
+                raise ValueError(f"サポートされていないファイル形式です: {file_ext}")
+        
+        # メディアタイプに応じて適切なメソッドを呼び出し
+        if media_type == MediaType.IMAGE:
+            return self.analyze_image(file_path, prompt)
+        elif media_type == MediaType.VIDEO:
+            return self.analyze_video(file_path, prompt)
+        else:
+            raise ValueError(f"サポートされていないメディアタイプです: {media_type}") 

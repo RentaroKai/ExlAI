@@ -28,7 +28,8 @@
         ]
       ]
     },
-    "id": 5
+    "id": 5,
+    "mode": "normal"
   },
   {
     "title": "読みカナ変換",
@@ -55,7 +56,8 @@
         ]
       ]
     },
-    "id": 6
+    "id": 6,
+    "mode": "normal"
   },
   {
     "title": "テキスト分類・重要度判定",
@@ -80,7 +82,8 @@
         ]
       ]
     },
-    "id": 7
+    "id": 7,
+    "mode": "normal"
   },
   {
     "title": "個人情報整形",
@@ -114,7 +117,8 @@
         ]
       ]
     },
-    "id": 8
+    "id": 8,
+    "mode": "normal"
   },
   {
     "title": "色形記述",
@@ -145,7 +149,8 @@
         ]
       ]
     },
-    "id": 14
+    "id": 14,
+    "mode": "normal"
   },
   {
     "title": "日本住所解析整形",
@@ -197,6 +202,58 @@
         ]
       ]
     },
-    "id": 15
+    "id": 15,
+    "mode": "normal"
+  },
+  {
+    "title": "画像の説明",
+    "prompt": "画像にうつっている主要なオブジェクトを説明する　例：猫",
+    "json_format_example": {
+      "説明": ""
+    },
+    "sample_data": {
+      "headers": [
+        "AIの進捗",
+        "元の値",
+        "説明"
+      ],
+      "rows": [
+        [
+          "",
+          "C:/Users/sushi.png",
+          "寿司"
+        ],
+        [
+          "",
+          "C:/Users/aaa.png",
+          "うさぎ"
+        ]
+      ]
+    },
+    "mode": "image",
+    "id": 16
+  },
+  {
+    "title": "生物特定",
+    "prompt": "動画に映っている生き物を特定し、記述してください。",
+    "json_format_example": {
+      "動画に映っている生き物": ""
+    },
+    "sample_data": {
+      "headers": [
+        "AIの進捗",
+        "元の値",
+        "動画に映っている生き物"
+      ],
+      "rows": [
+        [
+          "",
+          "C:/Users/GeneratedMovie.mp4",
+          "らっこのキャラクター"
+        ]
+      ]
+    },
+    "mode": "video",
+    "id": 17
   }
 ]

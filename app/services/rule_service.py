@@ -6,11 +6,18 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 import sys
 import shutil
+from pathlib import Path
 
 from utils.config import config_manager
 from .gemini_api import GeminiAPI, GeminiAPIError
 
 logger = logging.getLogger(__name__)
+
+class ProcessMode:
+    """処理モード定義"""
+    NORMAL = "normal"      # テキスト処理
+    IMAGE = "image"        # 画像処理  
+    VIDEO = "video"        # 動画処理
 
 class RuleService:
     """
@@ -57,6 +64,7 @@ class RuleService:
                     logger.warning(f"Unexpected rules format in {self.rules_path}")
                     self._rules = []
                 logger.debug(f"Loaded rules from {self.rules_path}")
+                
                 # IDマイグレーション: idフィールドがないルールに連番IDを付与
                 needs_save = False
                 for idx, rule in enumerate(self._rules):
@@ -64,8 +72,14 @@ class RuleService:
                         rule["id"] = idx
                         logger.info(f"Assigned new id={idx} to rule title={rule.get('title')}")
                         needs_save = True
+                    # モードマイグレーション: modeフィールドがないルールにnormalモードを付与
+                    if "mode" not in rule:
+                        rule["mode"] = ProcessMode.NORMAL
+                        logger.info(f"Assigned normal mode to rule id={rule.get('id')}")
+                        needs_save = True
+                
                 if needs_save:
-                    logger.info("Migrated rules, saving updated rules with IDs.")
+                    logger.info("Migrated rules, saving updated rules with IDs and modes.")
                     self._save_rules()
 
                 # --- 追加: stray 'rule_name' キーの削除と重複IDのクリーンアップ ---
@@ -132,10 +146,11 @@ class RuleService:
         logger.info(f"Generated json_format_example map with keys: {output_headers}")
         return example_map
 
-    def create_rule(self, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def create_rule(self, samples: List[Dict[str, Any]], mode: str = ProcessMode.NORMAL) -> Dict[str, Any]:
         """
         新規ルールをAIに生成させ、ローカルに保存 (3ステップ：prompt/json例/title)
         引数 samples: [{"input": str, "output": Dict[str,str], "fields": List[str]}]
+        引数 mode: 処理モード（ProcessMode定数）
         戻り値: metadata dict (rule_name, etc.)
         """
         # --- 入力サンプルをテーブル形式で構築 ---
@@ -247,42 +262,49 @@ class RuleService:
             "title": rule_name,
             "prompt": rule_prompt,
             "json_format_example": json_format_example,
-            "sample_data": sample_data
+            "sample_data": sample_data,
+            "mode": mode  # モード情報を追加
         }
         # 新規ID付与
         existing_ids = [r.get("id", -1) for r in self._rules]
         new_id = max(existing_ids) + 1 if existing_ids else 0
         rule_obj["id"] = new_id
-        logger.info(f"Assigned id={new_id} to new rule '{rule_name}'")
+        logger.info(f"Assigned id={new_id} to new rule '{rule_name}' with mode={mode}")
         # ローカルファイルに保存
         self._rules.append(rule_obj)
         self._save_rules()
-        logger.info(f"Rule id={new_id} ('{rule_name}') created and saved.")
+        logger.info(f"Rule id={new_id} ('{rule_name}') created and saved with mode={mode}.")
 
         # 戻り値用メタデータ
         metadata = rule_obj.copy()
         metadata['rule_name'] = rule_name
         return metadata
 
-    def regenerate_rule(self, rule_id: int, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def regenerate_rule(self, rule_id: int, samples: List[Dict[str, Any]], mode: str = None) -> Dict[str, Any]:
         """
         既存ルールを再生成し、更新する
         """
         # 指定ルールを検索
         updated_idx = -1
+        old_mode = ProcessMode.NORMAL  # デフォルト値
         for idx, r in enumerate(self._rules):
             if r.get("id") == rule_id:
                 updated_idx = idx
+                old_mode = r.get("mode", ProcessMode.NORMAL)  # 既存のモードを保持
                 break
         if updated_idx == -1:
             raise GeminiAPIError(f"ルール id={rule_id} が見つかりません")
 
+        # モードが指定されていない場合は既存のモードを使用
+        if mode is None:
+            mode = old_mode
+
         # 追加: regenerate_rule開始時のデバッグログ
         logger.debug(f"Starting regenerate_rule: rule_id={rule_id}, updated_idx={updated_idx}, current_ids={[r.get('id') for r in self._rules]}")
-        logger.info(f"Regenerating rule id={rule_id}...")
+        logger.info(f"Regenerating rule id={rule_id} with mode={mode}...")
         # 新しいサンプルデータでルールを作成 (create_ruleを呼び出す)
         try:
-            new_rule_metadata = self.create_rule(samples)
+            new_rule_metadata = self.create_rule(samples, mode)
             # 追加: create_rule後のデバッグログ
             logger.debug(f"After create_rule: metadata returned={new_rule_metadata}")
             logger.debug(f"Current rule IDs after create: {[r.get('id') for r in self._rules]}")
@@ -309,15 +331,23 @@ class RuleService:
             raise GeminiAPIError(f"ルール id={rule_id} の再生成に失敗しました: {e}")
 
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self, mode: str = None) -> List[Dict[str, Any]]:
         """
         保存済みルールのメタ情報リストを返却
+        引数 mode: 指定されている場合は、そのモードのルールのみを返却
         """
         # ローカルファイルから最新の状態を読み込む（他のプロセスによる変更を反映するため）
         # self._load_rules()
         # ↑UIから頻繁に呼ばれる可能性があるため、毎回ロードするのは効率が悪い。
         # 保存時に同期が取れている前提とする。必要であればUI側でリフレッシュを促す。
-        return self._rules
+        
+        if mode is None:
+            return self._rules
+        else:
+            # 指定されたモードのルールのみを返却
+            filtered_rules = [rule for rule in self._rules if rule.get("mode", ProcessMode.NORMAL) == mode]
+            logger.debug(f"Filtered rules for mode={mode}: {len(filtered_rules)} out of {len(self._rules)} total rules")
+            return filtered_rules
 
     def delete_rule(self, rule_id: int) -> bool:
         """
@@ -349,6 +379,7 @@ class RuleService:
         headers = sample_data.get('headers', [])
         rows = sample_data.get('rows', [])
         results = []
+        rule_mode = rule.get('mode', ProcessMode.NORMAL)  # ルールのモードを取得
 
         if not headers or not rows:
              logger.warning(f"Rule id={rule_id} has empty sample_data. Cannot apply rule based on samples.")
@@ -359,7 +390,7 @@ class RuleService:
         output_indices = [idx for idx, h in enumerate(headers, start=1) if idx >= 3 and h.strip()]
         output_headers = [headers[i-1] for i in output_indices]
         # ログ: 処理開始
-        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        logger.info(f"apply_rule 開始: rule_id={rule_id} mode={rule_mode} 対象行数={len(inputs)}件")
 
         logger.info(f"Applying rule id={rule_id} based on sample matching...")
         for inp in inputs:
@@ -386,34 +417,77 @@ class RuleService:
                 logger.debug(f"Input '{inp}' did not match any sample in rule id={rule_id}, calling AI.")
                 # サンプル一致しない場合はAIを呼び出して処理
                 try:
-                    # プロンプトの組み立て
-                    lines = [
-                        rule.get("prompt", ""),
-                        "次のようなJSONフォーマットで返答してください。",
-                        json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2),
-                        f"元の値: {inp}"
-                    ]
-                    combined_prompt = "\n".join(lines)
-                    # 送信プロンプトをログに出力
-                    logger.debug(f"送信プロンプト内容:\n{combined_prompt}")
-                    logger.info(f"リアルデータ変換用モデル: {self.gemini.minutes_model} を使用してAI呼び出しを実行")
-                    resp = self.gemini.client.models.generate_content(
-                        model=self.gemini.minutes_model,
-                        contents=combined_prompt
-                    )
-                    text = resp.text.strip()
-                    # コードブロックマーカー除去
-                    if text.startswith("```"):
-                        text = re.sub(r"```(?:json)?\n?", "", text)
-                        text = text.rstrip("`\n ")
-                    # JSON部分抽出
-                    start = text.find("{")
-                    end = text.rfind("}")
-                    json_str = text[start:end+1] if start != -1 and end != -1 else text
-                    data = json.loads(json_str)
-                    out = {key: data.get(key, "") for key in output_headers}
-                    results.append({"input": inp, "output": out, "status": "success"})
-                    logger.debug(f"AI output for input '{inp}': {out}")
+                    # モードに応じて処理方法を変更
+                    if rule_mode == ProcessMode.IMAGE or rule_mode == ProcessMode.VIDEO:
+                        # 画像・動画の場合はメディア解析APIを使用
+                        logger.info(f"Processing {rule_mode} file: {inp}")
+                        
+                        # ファイルパスの検証
+                        file_path = Path(inp)
+                        if not file_path.exists():
+                            raise FileNotFoundError(f"ファイルが見つかりません: {inp}")
+                        
+                        # プロンプトの組み立て
+                        media_prompt = f"{rule.get('prompt', '')}\n\n以下の項目について回答してください:\n"
+                        for header in output_headers:
+                            media_prompt += f"- {header}\n"
+                        media_prompt += f"\n回答は以下のJSONフォーマットで返してください:\n"
+                        media_prompt += json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2)
+                        
+                        # 画像・動画解析APIを呼び出し
+                        logger.debug(f"メディア解析プロンプト:\n{media_prompt}")
+                        if rule_mode == ProcessMode.IMAGE:
+                            ai_response = self.gemini.analyze_image(inp, media_prompt)
+                        else:  # VIDEO
+                            ai_response = self.gemini.analyze_video(inp, media_prompt)
+                        
+                        # レスポンスをJSON解析
+                        text = ai_response.strip()
+                        # コードブロックマーカー除去
+                        if text.startswith("```"):
+                            text = re.sub(r"```(?:json)?\n?", "", text)
+                            text = text.rstrip("`\n ")
+                        # JSON部分抽出
+                        start = text.find("{")
+                        end = text.rfind("}")
+                        json_str = text[start:end+1] if start != -1 and end != -1 else text
+                        data = json.loads(json_str)
+                        out = {key: data.get(key, "") for key in output_headers}
+                        
+                        results.append({"input": inp, "output": out, "status": "success"})
+                        logger.debug(f"Media analysis output for input '{inp}': {out}")
+                        
+                    else:
+                        # テキストモードの場合は従来の処理
+                        # プロンプトの組み立て
+                        lines = [
+                            rule.get("prompt", ""),
+                            "次のようなJSONフォーマットで返答してください。",
+                            json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2),
+                            f"元の値: {inp}"
+                        ]
+                        combined_prompt = "\n".join(lines)
+                        # 送信プロンプトをログに出力
+                        logger.debug(f"送信プロンプト内容:\n{combined_prompt}")
+                        logger.info(f"リアルデータ変換用モデル: {self.gemini.minutes_model} を使用してAI呼び出しを実行")
+                        resp = self.gemini.client.models.generate_content(
+                            model=self.gemini.minutes_model,
+                            contents=combined_prompt
+                        )
+                        text = resp.text.strip()
+                        # コードブロックマーカー除去
+                        if text.startswith("```"):
+                            text = re.sub(r"```(?:json)?\n?", "", text)
+                            text = text.rstrip("`\n ")
+                        # JSON部分抽出
+                        start = text.find("{")
+                        end = text.rfind("}")
+                        json_str = text[start:end+1] if start != -1 and end != -1 else text
+                        data = json.loads(json_str)
+                        out = {key: data.get(key, "") for key in output_headers}
+                        results.append({"input": inp, "output": out, "status": "success"})
+                        logger.debug(f"AI output for input '{inp}': {out}")
+                        
                 except Exception as e:
                     logger.error(f"AI処理エラー for input '{inp}': {e}")
                     results.append({"input": inp, "output": {}, "status": "error", "error_msg": str(e)})
@@ -422,15 +496,18 @@ class RuleService:
         success_count = sum(1 for r in results if r.get("status") == "success")
         error_count = len(results) - success_count
         logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
-        return results 
+        return results
 
     def update_rule(self, rule_id: int, new_data: Dict[str, Any]) -> bool:
-        """既存ルールのtitleとpromptを更新し保存する"""
+        """既存ルールのtitle、prompt、modeを更新し保存する"""
         logger.info(f"Updating rule id={rule_id} with data={new_data}")
         for r in self._rules:
             if r.get("id") == rule_id:
                 r["title"] = new_data.get("title", r["title"])
                 r["prompt"] = new_data.get("prompt", r["prompt"])
+                if "mode" in new_data:
+                    r["mode"] = new_data["mode"]
+                    logger.info(f"Rule id={rule_id} mode updated to {new_data['mode']}")
                 self._save_rules()
                 logger.info(f"Rule id={rule_id} updated successfully.")
                 return True
