@@ -18,6 +18,8 @@ class AIPanel(QWidget):
         # 初期ルール状態とJSONからの履歴ルールの設定
         self.current_rule_id = None
         self.current_mode = ProcessMode.NORMAL  # 現在のモード
+        # ルール作成モードの状態管理を追加
+        self.is_new_rule_mode = True  # True: 新規作成モード, False: 履歴選択モード
         self.rule_service = RuleService()
         self.load_rules_from_json()
         self.setup_ui()
@@ -43,13 +45,24 @@ class AIPanel(QWidget):
         # 右側にスペースを追加
         top_layout.addStretch()
         
-        # 履歴ボタン（右上に配置）
+        # 履歴ボタンを処理ルール枠内に表示
+        history_layout = QHBoxLayout()
+        history_layout.addStretch()
+        
+        # 新規作成ボタン（左側）
+        self.new_rule_btn = QPushButton("リセット")
+        self.new_rule_btn.setFixedHeight(30)
+        self.new_rule_btn.setToolTip("テンプレートから新しいルールを作成します")
+        history_layout.addWidget(self.new_rule_btn)
+        
+        # 履歴ボタン（右側）
         self.history_btn = QToolButton()
         self.history_btn.setText("📋 履歴")
         self.history_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.history_btn.setStyleSheet("color: #3A506B; background-color: transparent; border: none;")
         self.history_btn.setToolTip("過去の履歴からルールを適用します")
-        top_layout.addWidget(self.history_btn)
+        self.history_btn.setFixedHeight(30)
+        history_layout.addWidget(self.history_btn)
         # ヒストリールールメニュー設定（IDベース）
         self.create_history_menu()
         
@@ -63,9 +76,6 @@ class AIPanel(QWidget):
         rule_layout.setSpacing(10)
         
         # 履歴ボタンを処理ルール枠内に表示
-        history_layout = QHBoxLayout()
-        history_layout.addStretch()
-        history_layout.addWidget(self.history_btn)
         rule_layout.addLayout(history_layout)
         
         # 処理ルールのタイトル
@@ -168,8 +178,10 @@ class AIPanel(QWidget):
         self.auto_generate_btn.clicked.connect(self.on_auto_generate)
         self.rule_detail_btn.clicked.connect(self.show_rule_detail_dialog)
         self.rule_delete_btn.clicked.connect(self.delete_current_rule)
+        self.new_rule_btn.clicked.connect(self.on_new_rule_mode)
         # 初期UI状態の更新
         self.update_ui_state()
+        self.update_tab_styles()
     
     def create_history_menu(self):
         """履歴メニューを作成（モード別フィルタリング）"""
@@ -248,6 +260,8 @@ class AIPanel(QWidget):
             self.rule_detail_btn.hide()
             # 削除ボタンも非表示にする
             self.rule_delete_btn.hide()
+            # 新規作成ボタンも非表示にする（ルール未作成時はタブ不要）
+            self.new_rule_btn.hide()
             # サンプル生成ボタンはデフォルト文言に戻す
             self.auto_generate_btn.setText("テンプレートからルール生成")
             self.process_selected_btn.setEnabled(False)
@@ -269,6 +283,8 @@ class AIPanel(QWidget):
             self.rule_detail_btn.show()
             # 削除ボタンを表示
             self.rule_delete_btn.show()
+            # 新規作成ボタンを表示（ルール存在時はタブ切り替え可能）
+            self.new_rule_btn.show()
             # サンプル生成ボタンの文言を変更
             self.auto_generate_btn.setText("再生成する")
             self.process_selected_btn.setEnabled(True)
@@ -285,7 +301,10 @@ class AIPanel(QWidget):
         title = self.rule_map.get(rule_id, {}).get('title', '')
         logger.debug(f"apply_history_rule called with rule_id={rule_id}, title='{title}'")
         self.current_rule_id = rule_id
+        # 履歴選択モードに切り替え
+        self.is_new_rule_mode = False
         self.update_ui_state()
+        self.update_tab_styles()
         QToolTip.showText(self.history_btn.mapToGlobal(self.history_btn.rect().center()), 
                           f"ルール「{title}」を適用しました", self)
         rule_data = self.rule_map.get(rule_id)
@@ -377,6 +396,9 @@ class AIPanel(QWidget):
                 self.create_history_menu()
             # 新ルールを適用
             self.apply_history_rule(new_id)
+            # 新規作成完了後は新規作成モードに
+            self.is_new_rule_mode = True
+            self.update_tab_styles()
             logger.info(f"ルール生成完了: id={new_id}, title='{new_title}', mode={self.current_mode}")
         except NotImplementedError:
             logger.error("create_rule未実装")
@@ -433,3 +455,72 @@ class AIPanel(QWidget):
                 self.rule_delete_btn.mapToGlobal(self.rule_delete_btn.rect().center()),
                 "ルールの削除に失敗しました", self
             )
+
+    def on_new_rule_mode(self):
+        """新規作成モードに切り替える"""
+        self.is_new_rule_mode = True
+        self.current_rule_id = None
+        self.update_ui_state()
+        self.update_tab_styles()
+        QToolTip.showText(self.new_rule_btn.mapToGlobal(self.new_rule_btn.rect().center()), 
+                          "新規作成モードに切り替えました", self)
+
+    def update_tab_styles(self):
+        """タブのスタイルを更新する"""
+        if self.is_new_rule_mode:
+            # 新規作成モード：新規作成ボタンを選択状態、履歴ボタンを非選択状態
+            self.new_rule_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #4B918B; 
+                    color: white; 
+                    font-size: 12px; 
+                    font-weight: bold; 
+                    padding: 5px 15px; 
+                    border-radius: 3px;
+                    border: 2px solid #4B918B;
+                }
+                QPushButton:hover {
+                    background-color: #3A7169;
+                }
+            """)
+            self.history_btn.setStyleSheet("""
+                QToolButton {
+                    background-color: #E8EEF4; 
+                    color: #3A506B; 
+                    font-size: 12px; 
+                    padding: 5px 15px; 
+                    border-radius: 3px;
+                    border: 2px solid #D1D9E6;
+                }
+                QToolButton:hover {
+                    background-color: #D1D9E6;
+                }
+            """)
+        else:
+            # 履歴選択モード：履歴ボタンを選択状態、新規作成ボタンを非選択状態
+            self.new_rule_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #E8EEF4; 
+                    color: #3A506B; 
+                    font-size: 12px; 
+                    padding: 5px 15px; 
+                    border-radius: 3px;
+                    border: 2px solid #D1D9E6;
+                }
+                QPushButton:hover {
+                    background-color: #D1D9E6;
+                }
+            """)
+            self.history_btn.setStyleSheet("""
+                QToolButton {
+                    background-color: #4B918B; 
+                    color: white; 
+                    font-size: 12px; 
+                    padding: 5px 15px; 
+                    border-radius: 3px;
+                    border: 2px solid #4B918B;
+                }
+                QToolButton:hover {
+                    background-color: #3A7169;
+                }
+            """)
