@@ -900,59 +900,119 @@ class ExcelPanel(QWidget):
             logger.info(f"ExcelPanel: Drag&Drop areas hidden for {new_mode} mode")
     
     def add_file_paths_to_table(self, file_paths: list, target_table: str = "data"):
-        """ドラッグ&ドロップされたファイルパスをテーブルに追加"""
-        # target_tableに基づいて対象テーブルを決定
+        """指定されたファイルパスをテーブルに追加する"""
+        logger.debug(f"add_file_paths_to_table called with {len(file_paths)} files")
+        
+        # どちらのテーブルに追加するかを決定
         if target_table == "sample":
             table = self.sample_table
-            table_name = "テンプレート"
-        else:
+            start_row = 1  # サンプルテーブルの場合、1行目から開始
+        else:  # target_table == "data"
             table = self.data_table
-            table_name = "処理エリア"
+            # データテーブルで最初の空行を見つける
+            start_row = 1
+            while start_row < table.rowCount():
+                item = table.item(start_row, 1)  # B列（元の値列）をチェック
+                if not item or not item.text():
+                    break
+                start_row += 1
         
-        current_row = 1  # ヘッダー行をスキップ
-        
-        # 既存データの最後の行を見つける
-        while current_row < table.rowCount():
-            item = table.item(current_row, 1)  # "元の値"列
-            if not item or not item.text().strip():
-                break
-            current_row += 1
-        
-        # ファイルパスを追加
+        current_row = start_row
         for file_path in file_paths:
+            # テーブルの行数が足りない場合は追加
             if current_row >= table.rowCount():
-                # テーブルに行が足りない場合は行を追加
-                table.insertRow(table.rowCount())
-                logger.debug(f"Added new row to {table_name}: {table.rowCount()}")
+                table.setRowCount(current_row + 1)
+                # 新しい行のスタイルを設定
+                if target_table == "data":
+                    self._setup_data_row_style(current_row)
             
-            # "元の値"列にファイルパスを設定
-            path_item = QTableWidgetItem(file_path)
-            table.setItem(current_row, 1, path_item)
+            # ファイルパスをB列（元の値列）に設定
+            item = QTableWidgetItem(file_path)
+            if target_table == "sample":
+                item.setBackground(QBrush(QColor(245, 245, 245)))  # 薄いグレー
+            else:
+                item.setBackground(QBrush(QColor(255, 255, 255)))  # 白
+            item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒色テキスト
+            table.setItem(current_row, 1, item)
             
-            # AI進捗列を"未処理"に設定
-            status_item = QTableWidgetItem("未処理")
-            status_item.setTextAlignment(Qt.AlignCenter)
-            table.setItem(current_row, 0, status_item)
+            # AI進捗列（A列）を「未処理」に設定
+            if target_table == "data":
+                progress_item = QTableWidgetItem("未処理")
+                progress_item.setTextAlignment(Qt.AlignCenter)
+                progress_item.setBackground(QBrush(QColor(220, 220, 220)))  # グレー
+                progress_item.setFlags(progress_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+                table.setItem(current_row, 0, progress_item)
             
-            logger.info(f"Added file path to {table_name} row {current_row}: {os.path.basename(file_path)}")
+            logger.debug(f"Added file path to {target_table} table at row {current_row}: {file_path}")
             current_row += 1
         
-        # ファイル追加完了メッセージ
-        file_details = []
-        for file_path in file_paths:
-            file_name = os.path.basename(file_path)
-            try:
-                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-                file_details.append(f"• {file_name} ({file_size_mb:.1f}MB)")
-            except:
-                file_details.append(f"• {file_name}")
+        logger.info(f"Successfully added {len(file_paths)} files to {target_table} table starting from row {start_row}")
+
+    def clear_sample_data(self):
+        """サンプルテーブルをクリアして初期状態に戻す"""
+        logger.info("サンプルテーブルをクリア中...")
         
-        success_message = f"✅ {len(file_paths)}個のファイルを{table_name}に追加しました。\n\n"
-        success_message += "\n".join(file_details)
+        # サンプルテーブルの内容をクリア
+        self.sample_table.clearContents()
         
-        if len(file_details) <= 5:
-            message_content = success_message
-        else:
-            message_content = f"✅ {len(file_paths)}個のファイルを{table_name}に追加しました。"
+        # 基本的なヘッダー行を設定（0行目）
+        basic_headers = ["AIの進捗", "元の値", "項目名＝???", "項目名＝???"]
         
-        QMessageBox.information(self, "ファイル追加完了", message_content)
+        for col, text in enumerate(basic_headers):
+            item = QTableWidgetItem(text)
+            # ヘッダーの色分け
+            if col in [0, 1]:
+                bgcolor = QColor(220, 220, 220)  # 入力不可（濃いグレー）
+            else:
+                bgcolor = QColor(245, 245, 245)  # 入力可（薄いグレー）
+            item.setBackground(QBrush(bgcolor))
+            item.setForeground(QBrush(QColor(0, 0, 0)))
+            item.setFont(QFont("Arial", 10, QFont.Bold))
+            
+            # AI進捗列は編集不可に設定
+            if col == 0:
+                item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+            
+            self.sample_table.setItem(0, col, item)
+        
+        # サンプルテーブルの残りの列を空にする
+        for col in range(len(basic_headers), self.sample_table.columnCount()):
+            item = QTableWidgetItem("")
+            item.setBackground(QBrush(QColor(255, 255, 255)))  # 白
+            self.sample_table.setItem(0, col, item)
+        
+        # サンプルデータ行（1行目以降）をクリア
+        for row in range(1, self.sample_table.rowCount()):
+            for col in range(self.sample_table.columnCount()):
+                item = QTableWidgetItem("")
+                # 列によって背景色を設定
+                if col == 0:  # AIの進捗列
+                    item.setBackground(QBrush(QColor(220, 220, 220)))
+                    item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+                    item.setTextAlignment(Qt.AlignCenter)
+                elif col == 1:  # 元の値列
+                    item.setBackground(QBrush(QColor(255, 255, 255)))  # 白
+                else:  # その他の列
+                    item.setBackground(QBrush(QColor(255, 255, 255)))  # 白
+                
+                item.setForeground(QBrush(QColor(0, 0, 0)))
+                self.sample_table.setItem(row, col, item)
+        
+        # データテーブルのヘッダー行も同期
+        for col in range(len(basic_headers)):
+            header_text = basic_headers[col]
+            item = QTableWidgetItem(header_text)
+            item.setBackground(QBrush(QColor(220, 220, 220)))  # 濃いグレー
+            item.setForeground(QBrush(QColor(0, 0, 0)))
+            item.setFont(QFont("Arial", 10, QFont.Bold))
+            item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+            self.data_table.setItem(0, col, item)
+        
+        # データテーブルのヘッダー行の残りの列もクリア
+        for col in range(len(basic_headers), self.data_table.columnCount()):
+            item = QTableWidgetItem("")
+            item.setBackground(QBrush(QColor(220, 220, 220)))
+            item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+            self.data_table.setItem(0, col, item)
+        
+        logger.info("サンプルテーブルのクリアが完了しました")

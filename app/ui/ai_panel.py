@@ -462,8 +462,17 @@ class AIPanel(QWidget):
         self.current_rule_id = None
         self.update_ui_state()
         self.update_tab_styles()
+        
+        # サンプルテーブルもクリアする
+        if hasattr(self, 'excel_panel') and self.excel_panel:
+            try:
+                self.excel_panel.clear_sample_data()
+                logger.info("リセット時にサンプルテーブルをクリアしました")
+            except Exception as e:
+                logger.error(f"サンプルテーブルクリアエラー: {e}")
+        
         QToolTip.showText(self.new_rule_btn.mapToGlobal(self.new_rule_btn.rect().center()), 
-                          "新規作成モードに切り替えました", self)
+                          "リセットしました", self)
 
     def update_tab_styles(self):
         """タブのスタイルを更新する"""
