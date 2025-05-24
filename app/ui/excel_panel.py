@@ -52,11 +52,12 @@ class CustomTableWidget(QTableWidget):
         super().keyPressEvent(event)
 
     def open_context_menu(self, position):
-        """右クリックメニューを表示し、コピー・ペーストを提供する"""
+        """右クリックメニューを表示し、コピー・ペースト・クリアを提供する"""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         copy_act = menu.addAction("コピー")
         paste_act = menu.addAction("ペースト")
+        clear_act = menu.addAction("クリア")
         action = menu.exec(self.viewport().mapToGlobal(position))
         if action == copy_act:
             logger.debug("ContextMenu: コピー選択")
@@ -64,6 +65,9 @@ class CustomTableWidget(QTableWidget):
         elif action == paste_act:
             logger.debug("ContextMenu: ペースト選択")
             self.paste_clipboard()
+        elif action == clear_act:
+            logger.debug("ContextMenu: クリア選択")
+            self.clear_selection()
 
     def copy_selection(self):
         """選択セルの内容をクリップボードにコピーする"""
@@ -102,6 +106,35 @@ class CustomTableWidget(QTableWidget):
         for dr, line in enumerate(rows):
             for dc, val in enumerate(line.split('\t')):
                 self.setItem(cur_r + dr, cur_c + dc, QTableWidgetItem(val))
+
+    def clear_selection(self):
+        """選択されたセルの内容をクリアする"""
+        from PySide6.QtWidgets import QTableWidgetItem
+        ranges = self.selectedRanges()
+        if not ranges:
+            return
+        
+        rng = ranges[0]
+        cleared_count = 0
+        
+        for row in range(rng.topRow(), rng.bottomRow() + 1):
+            for col in range(rng.leftColumn(), rng.rightColumn() + 1):
+                item = self.item(row, col)
+                if item:
+                    # セルが編集可能かチェック
+                    if item.flags() & Qt.ItemIsEditable:
+                        # AI進捗列（0列目）の場合は「未処理」に設定、その他は空文字に設定
+                        if col == 0:
+                            item.setText("未処理")
+                            item.setTextAlignment(Qt.AlignCenter)
+                        else:
+                            item.setText("")
+                        cleared_count += 1
+                        logger.debug(f"Cleared cell at row {row}, col {col}")
+                    else:
+                        logger.debug(f"Skipped read-only cell at row {row}, col {col}")
+        
+        logger.info(f"ContextMenu: クリア完了 - {cleared_count}個のセルをクリアしました")
 
 class BorderDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
