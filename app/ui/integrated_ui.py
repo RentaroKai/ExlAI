@@ -18,6 +18,7 @@ from app.ui.excel_panel import ExcelPanel
 from app.ui.ai_panel import AIPanel
 from app.ui.config_dialog import ConfigDialog
 from app.ui.help_dialog import HelpDialog
+from app.workers import AIWorker
 
 BACKUP_CSV_NAME = 'last_processed.csv'
 
@@ -77,6 +78,9 @@ class IntegratedExcelUI(QMainWindow):
         
         # パネル間の連携を設定
         self.connect_panels()
+        
+        # ワーカースレッド用変数の初期化
+        self.ai_worker = None
     
     def connect_panels(self):
         """左側パネルと右側パネル間の連携を設定"""
@@ -115,13 +119,25 @@ class IntegratedExcelUI(QMainWindow):
             active_table.setItem(row, 0, in_progress)
         # UI更新を強制
         QApplication.processEvents()
-        # UIロックとスピナー表示 & 処理開始ログ
+        # UIロック表示
         self.ai_panel.process_selected_btn.setEnabled(False)
         self.ai_panel.process_all_btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        
+        # ワーカースレッドでAI処理を実行
+        logger.info(f"process_selected 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        self.ai_worker = AIWorker(self.ai_panel.rule_service, rule_id, inputs)
+        
+        # 処理完了とエラーハンドリングのシグナル接続
+        self.ai_worker.finished.connect(lambda results: self._on_process_selected_finished(results, rows, active_table))
+        self.ai_worker.error_occurred.connect(self._on_process_selected_error)
+        
+        # ワーカースレッド開始
+        self.ai_worker.start()
+    
+    def _on_process_selected_finished(self, results, rows, active_table):
+        """process_selected処理完了時のコールバック"""
         try:
-            results = self.ai_panel.rule_service.apply_rule(rule_id, inputs)
             from PySide6.QtWidgets import QTableWidgetItem
             for row, result in zip(rows, results):
                 status = result.get('status')
@@ -139,10 +155,12 @@ class IntegratedExcelUI(QMainWindow):
                         if hdr and hdr.text() == header:
                             active_table.setItem(row, c, QTableWidgetItem(val))
                             break
+            
             # 処理完了ログ
             success_count = sum(1 for r in results if r.get('status') == 'success')
             error_count = len(results) - success_count
             logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
+            
             # バックアップCSVを保存
             try:
                 base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -151,21 +169,30 @@ class IntegratedExcelUI(QMainWindow):
                 logger.info(f"バックアップ保存完了: {backup_path}")
             except Exception as e:
                 logger.error(f"バックアップ保存エラー: {e}")
-        except Exception as e:
-            logger.error(f"apply_rule 中断: {e}")
-            # 例外ダイアログ表示
-            msg = QMessageBox(self)
-            msg.setWindowTitle("エラーが発生しました")
-            msg.setText("処理中に予期せぬエラーが発生しました")
-            open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
-            msg.exec()
-            if msg.clickedButton() == open_btn:
-                os.startfile(LOG_FILE_PATH)
+                
         finally:
             # UIロック解除
             self.ai_panel.process_selected_btn.setEnabled(True)
             self.ai_panel.process_all_btn.setEnabled(True)
             QApplication.restoreOverrideCursor()
+            
+    def _on_process_selected_error(self, error_msg):
+        """process_selected処理エラー時のコールバック"""
+        logger.error(f"apply_rule 中断: {error_msg}")
+        
+        # エラーダイアログ表示
+        msg = QMessageBox(self)
+        msg.setWindowTitle("エラーが発生しました")
+        msg.setText("処理中に予期せぬエラーが発生しました")
+        open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
+        msg.exec()
+        if msg.clickedButton() == open_btn:
+            os.startfile(LOG_FILE_PATH)
+            
+        # UIロック解除
+        self.ai_panel.process_selected_btn.setEnabled(True)
+        self.ai_panel.process_all_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
     
     def process_all(self):
         """すべての行を処理する"""
@@ -206,13 +233,25 @@ class IntegratedExcelUI(QMainWindow):
         for row in rows:
             cell = tbl.item(row, 1)
             inputs.append(cell.text() if cell and cell.text() else "")
-        # UIロックとスピナー表示 & 処理開始ログ
+        # UIロック表示
         self.ai_panel.process_selected_btn.setEnabled(False)
         self.ai_panel.process_all_btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        logger.info(f"apply_rule 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        
+        # ワーカースレッドでAI処理を実行
+        logger.info(f"process_all 開始: rule_id={rule_id} 対象行数={len(inputs)}件")
+        self.ai_worker = AIWorker(self.ai_panel.rule_service, rule_id, inputs)
+        
+        # 処理完了とエラーハンドリングのシグナル接続
+        self.ai_worker.finished.connect(lambda results: self._on_process_all_finished(results, rows, tbl))
+        self.ai_worker.error_occurred.connect(self._on_process_all_error)
+        
+        # ワーカースレッド開始
+        self.ai_worker.start()
+
+    def _on_process_all_finished(self, results, rows, tbl):
+        """process_all処理完了時のコールバック"""
         try:
-            results = self.ai_panel.rule_service.apply_rule(rule_id, inputs)
             from PySide6.QtWidgets import QTableWidgetItem
             for row, result in zip(rows, results):
                 status = result.get('status')
@@ -230,10 +269,12 @@ class IntegratedExcelUI(QMainWindow):
                         if hdr and hdr.text() == header:
                             tbl.setItem(row, c, QTableWidgetItem(val))
                             break
+            
             # 処理完了ログ
             success_count = sum(1 for r in results if r.get('status') == 'success')
             error_count = len(results) - success_count
             logger.info(f"apply_rule 完了: success={success_count}件 error={error_count}件")
+            
             # バックアップCSVを保存
             try:
                 base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -242,21 +283,30 @@ class IntegratedExcelUI(QMainWindow):
                 logger.info(f"バックアップ保存完了: {backup_path}")
             except Exception as e:
                 logger.error(f"バックアップ保存エラー: {e}")
-        except Exception as e:
-            logger.error(f"apply_rule 中断: {e}")
-            # 例外ダイアログ表示
-            msg = QMessageBox(self)
-            msg.setWindowTitle("エラーが発生しました")
-            msg.setText("処理中に予期せぬエラーが発生しました")
-            open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
-            msg.exec()
-            if msg.clickedButton() == open_btn:
-                os.startfile(LOG_FILE_PATH)
+                
         finally:
             # UIロック解除
             self.ai_panel.process_selected_btn.setEnabled(True)
             self.ai_panel.process_all_btn.setEnabled(True)
             QApplication.restoreOverrideCursor()
+            
+    def _on_process_all_error(self, error_msg):
+        """process_all処理エラー時のコールバック"""
+        logger.error(f"apply_rule 中断: {error_msg}")
+        
+        # エラーダイアログ表示
+        msg = QMessageBox(self)
+        msg.setWindowTitle("エラーが発生しました")
+        msg.setText("処理中に予期せぬエラーが発生しました")
+        open_btn = msg.addButton("ログファイルを開く", QMessageBox.AcceptRole)
+        msg.exec()
+        if msg.clickedButton() == open_btn:
+            os.startfile(LOG_FILE_PATH)
+            
+        # UIロック解除
+        self.ai_panel.process_selected_btn.setEnabled(True)
+        self.ai_panel.process_all_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
 
     def load_csv(self):
         from PySide6.QtWidgets import QFileDialog
