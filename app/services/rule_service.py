@@ -7,6 +7,7 @@ from datetime import datetime
 import sys
 import shutil
 from pathlib import Path
+import time
 
 from utils.config import config_manager
 from .gemini_api import GeminiAPI, GeminiAPIError
@@ -121,49 +122,16 @@ class RuleService:
             logger.error(f"Failed to save rules: {e}")
 
     def _generate_json_example(self, sample_data: Dict[str, Any]) -> Dict[str, str]:
-        """sample_data から json_format_example をヘッダー→空文字のマップ形式で生成する"""
-        logger.info("Generating json_format_example map from sample_data...")
-        headers = sample_data.get("headers", [])
-
-        # バリデーション: ヘッダーが存在すること
-        if not headers:
-            logger.error("sample_data missing headers.")
-            return {}
-
-        # 出力対象ヘッダーを抽出 (インデックス3以降、空文字除外)
-        output_headers = [
-            h for idx, h in enumerate(headers, start=1)
-            if idx >= 3 and h.strip()
-        ]
-        logger.debug(f"Output headers for example: {output_headers}")
-
-        if not output_headers:
-            logger.warning("No output headers found (column 3 onwards, non-empty). Returning empty example map.")
-            return {}
-
-        # 各ヘッダーに対して空文字をセット
-        example_map: Dict[str, str] = { key: "" for key in output_headers }
-        logger.info(f"Generated json_format_example map with keys: {output_headers}")
+        """サンプルデータから出力用JSONフォーマット例を生成"""
+        headers = sample_data.get('headers', [])
+        # "AIの進捗"と"元の値"を除く全てのヘッダーを対象とする
+        output_headers = [h for idx, h in enumerate(headers) if idx >= 2 and h.strip()]
+        # 各項目に空文字を設定したJSONテンプレートを生成
+        example_map = {header: "" for header in output_headers}
         return example_map
 
-    def create_rule(self, samples: List[Dict[str, Any]], mode: str = ProcessMode.NORMAL) -> Dict[str, Any]:
-        """
-        新規ルールをAIに生成させ、ローカルに保存 (3ステップ：prompt/json例/title)
-        引数 samples: [{"input": str, "output": Dict[str,str], "fields": List[str]}]
-        引数 mode: 処理モード（ProcessMode定数）
-        戻り値: metadata dict (rule_name, etc.)
-        """
-        # --- 入力サンプルをテーブル形式で構築 ---
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # fields に空文字が含まれている場合は除外する
-        fields = [f for f in samples[0].get('fields', []) if f] if samples else []
-        headers_init = ["AIの進捗", "元の値"] + fields
-        # AIの進捗欄は空文字とし、上部パネルでは値を表示しない
-        rows_init = [["", s.get('input','')] + [s.get('output',{}).get(f,'') for f in fields] for s in samples]
-        sample_data = {"headers": headers_init, "rows": rows_init}
-        logger.debug(f"Generated sample_data: {sample_data}")
-
-        # --- Phase1: 動的プロンプト生成 ---
+    def _generate_text_rule_prompt(self, samples: List[Dict[str, Any]], fields: List[str]) -> str:
+        """テキストモード用のルールプロンプト生成"""
         prompt_instructions = []
         # ヘッダー説明
         field_list = "、".join(fields)
@@ -190,6 +158,7 @@ class RuleService:
         # AIに送信するプロンプト全文をログ出力する
         prompt_content = "\n".join(prompt_instructions)
         logger.info(f"★aiに送った全文だよ★\n{prompt_content}")
+        
         try:
             logger.info("Generating rule prompt via Gemini API (JSON format)...")
             resp1 = self.gemini.client.models.generate_content(
@@ -209,12 +178,180 @@ class RuleService:
                 data = json.loads(json_str)
                 rule_prompt = data.get("prompt", "").strip()
                 logger.info(f"Parsed rule prompt from JSON: {rule_prompt}")
+                return rule_prompt
             except Exception as e:
                 logger.error(f"プロンプトJSONパースエラー: {e}, raw text: '{text}'")
-                rule_prompt = ""
+                return ""
         except Exception as e:
             logger.error(f"プロンプト生成エラー: {e}")
-            rule_prompt = ""
+            return ""
+
+    def _generate_media_rule_prompt(self, samples: List[Dict[str, Any]], fields: List[str], mode: str) -> str:
+        """画像・動画モード用のルールプロンプト生成"""
+        logger.info(f"🎬 Starting media rule prompt generation for mode: {mode}")
+        logger.info(f"📊 Input samples count: {len(samples)}, Fields: {fields}")
+        
+        # フィールドリストを作成
+        field_list = "、".join(fields)
+        
+        # 実際のメディアファイル解析結果を含む例を生成
+        analyzed_examples = []
+        
+        for idx, sample in enumerate(samples):
+            file_path = sample.get('input', '')
+            expected_outputs = sample.get('output', {})
+            
+            logger.info(f"🔍 Analyzing sample {idx+1}/{len(samples)}: {file_path}")
+            
+            try:
+                # ファイルパスの検証
+                file_path_obj = Path(file_path)
+                if not file_path_obj.exists():
+                    logger.warning(f"⚠️ Sample file not found: {file_path}, using filename only")
+                    analyzed_examples.append({
+                        'input_description': f"ファイル名: {file_path}",
+                        'outputs': expected_outputs
+                    })
+                    continue
+                
+                # ファイルサイズ情報をログに出力
+                file_size = file_path_obj.stat().st_size / (1024 * 1024)  # MB
+                logger.info(f"📁 File size: {file_size:.2f} MB")
+                
+                # メディアファイルを解析
+                analysis_prompt = f"このファイルの内容を詳しく説明してください。特に以下の観点から分析してください：\n"
+                for field in fields:
+                    analysis_prompt += f"- {field}に関連する要素\n"
+                
+                logger.debug(f"🤖 Media analysis prompt: {analysis_prompt}")
+                logger.info(f"🚀 Starting {mode} analysis via Gemini API...")
+                
+                # モードに応じて解析APIを呼び出し
+                analysis_start_time = time.time()
+                if mode == ProcessMode.IMAGE:
+                    analysis_result = self.gemini.analyze_image(file_path, analysis_prompt)
+                else:  # VIDEO
+                    analysis_result = self.gemini.analyze_video(file_path, analysis_prompt)
+                
+                analysis_time = time.time() - analysis_start_time
+                logger.info(f"✅ Analysis completed in {analysis_time:.2f} seconds")
+                logger.debug(f"📝 Analysis result for {file_path}: {analysis_result[:100]}...")
+                
+                analyzed_examples.append({
+                    'input_description': f"ファイル内容: {analysis_result[:200]}..." if len(analysis_result) > 200 else f"ファイル内容: {analysis_result}",
+                    'outputs': expected_outputs
+                })
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to analyze media file {file_path}: {e}")
+                # エラーの場合はファイル名のみを使用
+                analyzed_examples.append({
+                    'input_description': f"ファイル名: {file_path} (解析エラー: {e})",
+                    'outputs': expected_outputs
+                })
+        
+        logger.info(f"📋 Successfully analyzed {len([ex for ex in analyzed_examples if '解析エラー' not in ex['input_description']])}/{len(samples)} samples")
+        
+        # 解析結果を基にプロンプト生成指示を作成
+        prompt_instructions = []
+        
+        # ヘッダー説明（メディアファイル用）
+        media_type_name = "画像" if mode == ProcessMode.IMAGE else "動画"
+        prompt_instructions.append(
+            f"以下に示すのは、{media_type_name}ファイルの解析内容（「元の値」）と、それに対して特定の処理を行った結果得られた複数の出力項目（{field_list}）の具体例です。\n"
+        )
+        prompt_instructions.append("**データ例:**")
+        
+        # 解析結果を含む例を追加
+        for idx, example in enumerate(analyzed_examples):
+            prompt_instructions.append(f"例{idx+1}")
+            prompt_instructions.append(f"元の値: {example['input_description']}")
+            for field in fields:
+                output_value = example['outputs'].get(field, '')
+                prompt_instructions.append(f"項目名={field}: {output_value}")
+        
+        # 依頼部分（メディアファイル用）
+        prompt_instructions.append("\n**依頼:**")
+        prompt_instructions.append(
+            f"これらの{media_type_name}の解析内容（元の値）と出力（各項目）の関係性を分析し、"
+            f"同様の{media_type_name}ファイルを入力として与えた際に、これらの出力項目（{field_list}）を生成させるための"
+            f"AIに与えるべき指示（プロンプト）を推測し、作成してください。"
+        )
+        prompt_instructions.append("\n生成するプロンプトの要件:")
+        prompt_instructions.append(f"* {media_type_name}ファイルの内容を解析して指定された項目を抽出する汎用的な指示にしてください。")
+        prompt_instructions.append("* プロンプトは、AIに対する指示として機能する、端的で短い文章にまとめること。")
+        prompt_instructions.append(f"* {media_type_name}解析に特化した指示内容にしてください。")
+        
+        # JSON形式で出力させる指示
+        prompt_instructions.append("返答はJSON形式で {\"prompt\": \"<プロンプト>\"} のみを返し、他の文言を含めないでください。")
+        
+        # AIに送信するプロンプト全文をログ出力
+        prompt_content = "\n".join(prompt_instructions)
+        logger.info(f"★{media_type_name}モード用aiに送った全文だよ★\n{prompt_content}")
+        
+        try:
+            logger.info(f"🤖 Generating {media_type_name} rule prompt via Gemini API...")
+            rule_generation_start = time.time()
+            resp = self.gemini.client.models.generate_content(
+                model=self.gemini.transcription_model,
+                contents=prompt_content
+            )
+            rule_generation_time = time.time() - rule_generation_start
+            logger.info(f"⏱️ Rule prompt generation completed in {rule_generation_time:.2f} seconds")
+            
+            text = resp.text.strip()
+            logger.debug(f"📄 Raw response: {text[:100]}...")
+            
+            # コードブロック除去とJSON解析
+            if text.startswith("```"):
+                text = re.sub(r"```(?:json)?\\n?", "", text)
+                text = text.rstrip("`\\n ")
+            
+            start = text.find("{")
+            end = text.rfind("}")
+            json_str = text[start:end+1] if start != -1 and end != -1 else text
+            
+            try:
+                data = json.loads(json_str)
+                rule_prompt = data.get("prompt", "").strip()
+                logger.info(f"✅ Generated {media_type_name} rule prompt: {rule_prompt}")
+                return rule_prompt
+            except Exception as e:
+                logger.error(f"❌ {media_type_name}プロンプトJSONパースエラー: {e}, raw text: '{text}'")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"❌ {media_type_name}プロンプト生成エラー: {e}")
+            return ""
+
+    def create_rule(self, samples: List[Dict[str, Any]], mode: str = ProcessMode.NORMAL) -> Dict[str, Any]:
+        """
+        新規ルールをAIに生成させ、ローカルに保存 (3ステップ：prompt/json例/title)
+        引数 samples: [{"input": str, "output": Dict[str,str], "fields": List[str]}]
+        引数 mode: 処理モード（ProcessMode定数）
+        戻り値: metadata dict (rule_name, etc.)
+        """
+        # --- 入力サンプルをテーブル形式で構築 ---
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # fields に空文字が含まれている場合は除外する
+        fields = [f for f in samples[0].get('fields', []) if f] if samples else []
+        headers_init = ["AIの進捗", "元の値"] + fields
+        # AIの進捗欄は空文字とし、上部パネルでは値を表示しない
+        rows_init = [["", s.get('input','')] + [s.get('output',{}).get(f,'') for f in fields] for s in samples]
+        sample_data = {"headers": headers_init, "rows": rows_init}
+        logger.debug(f"Generated sample_data: {sample_data}")
+
+        # --- Phase1: 動的プロンプト生成（モード別対応） ---
+        logger.info(f"Starting rule creation for mode: {mode}")
+        
+        if mode in [ProcessMode.IMAGE, ProcessMode.VIDEO]:
+            # 画像・動画モードの場合：実際のファイル内容を解析してプロンプト生成
+            logger.info(f"Processing {mode} mode rule creation with file analysis")
+            rule_prompt = self._generate_media_rule_prompt(samples, fields, mode)
+        else:
+            # テキストモードの場合：従来の処理
+            logger.info("Processing normal mode rule creation")
+            rule_prompt = self._generate_text_rule_prompt(samples, fields)
 
         # --- Phase2: JSONフォーマット例生成 (Pythonで実装) ---
         logger.info("Generating json_format_example using _generate_json_example...")
