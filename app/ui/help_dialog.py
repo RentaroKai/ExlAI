@@ -2,7 +2,7 @@ import os
 import sys
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QTabWidget, QWidget, QPushButton, QScrollArea, 
-                             QTextEdit, QGroupBox)
+                             QTextEdit, QGroupBox, QFrame)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QFont, QIcon
 
@@ -10,7 +10,30 @@ class HelpDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ExlAI - ヘルプ")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 700)
+        self.setMaximumSize(1200, 800)
+        
+        # カラーパレット定義
+        self.colors = {
+            'background': '#f8f9fa',      # 明るいグレー背景（読みやすい）
+            'surface': '#e9ecef',         # 薄いグレーサーフェス（落ち着いた）
+            'headline': '#212529',        # ダークグレー（メインテキスト）
+            'paragraph': '#495057',       # ミディアムグレー（段落テキスト）
+            'accent': '#dc3545',          # 赤（ポイント使いのみ）
+            'secondary': '#6c757d',       # セカンダリグレー
+            'button': '#198754',          # 緑系ボタン（目に優しい）
+            'button_text': '#ffffff',     # ボタンテキスト（白）
+            'stroke': '#dc3545',          # 赤ストローク（エッジ使い）
+            'tertiary': '#f1f3f4'         # 第三色（薄いグレー）
+        }
+        
+        # ダイアログ全体のスタイル設定
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {self.colors['background']};
+                color: {self.colors['headline']};
+            }}
+        """)
         
         # アイコンの設定
         base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,190 +43,797 @@ class HelpDialog(QDialog):
         
         # メインレイアウト
         main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(15)
         
         # ヘッダー部分
-        header_layout = QHBoxLayout()
-        
-        # ロゴ画像
-        logo_label = QLabel()
-        logo_path = os.path.join(base_dir, "ExlAI.jpg")
-        if os.path.exists(logo_path):
-            pixmap = QPixmap(logo_path)
-            logo_label.setPixmap(pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        
-        # タイトルと説明
-        title_layout = QVBoxLayout()
-        title_label = QLabel("ExlAI")
-        title_label.setFont(QFont("Arial", 24, QFont.Bold))
-        subtitle_label = QLabel("エクセル風AIアシスタント - 基本ガイド")
-        subtitle_label.setFont(QFont("Arial", 14))
-        desc_label = QLabel("「こんなふうに処理できたらいいな」というイメージを入力するだけで、\nAIが自動的にデータを一括処理してくれます！")
-        desc_label.setWordWrap(True)
-        
-        title_layout.addWidget(title_label)
-        title_layout.addWidget(subtitle_label)
-        title_layout.addWidget(desc_label)
-        title_layout.addStretch()
-        
-        header_layout.addWidget(logo_label)
-        header_layout.addLayout(title_layout)
+        self._create_header(main_layout, base_dir)
         
         # タブウィジェット
         tab_widget = QTabWidget()
-        
-        # 基本的な使い方タブ
-        basic_tab = QWidget()
-        basic_layout = QVBoxLayout(basic_tab)
-        
-        # スクロールエリア
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        
-        # このアプリで何ができるの？
-        features_group = QGroupBox("このアプリで何ができるの？")
-        features_layout = QVBoxLayout()
-        features_text = QLabel(
-            "・エクセルの関数では実現が難しい複雑なデータ処理をAIが自動的に行います\n"
-            "・具体的な例：\n"
-            "  - 氏名を姓と名に分割する\n"
-            "  - 文章の誤字脱字をチェックして修正する\n"
-            "  - 文章を適切な表現に校正する\n"
-            "  - 様々なフォーマットのデータを統一された形式に整える\n"
-            "・一度ルールを作成すれば、同じパターンのデータを何度でも一括処理できます\n"
-            "・CSVファイルを簡単に読み込んだり保存したりできます（Excel形式と互換性あり）"
-        )
-        features_text.setWordWrap(True)
-        features_layout.addWidget(features_text)
-        features_group.setLayout(features_layout)
-        
-        # 使い方の手順
-        steps_group = QGroupBox("使い方の手順")
-        steps_layout = QVBoxLayout()
-        steps_text = QLabel(
-            "1. **アプリを起動する**\n"
-            "   - ExlAI.exeをダブルクリックして起動します\n\n"
-            "2. **Gemini APIの無料APIキーを取得する**\n"
-            "   - <a href=\"https://aistudio.google.com/app/apikey\">https://aistudio.google.com/app/apikey</a> にアクセスして無料のAPIキーを作成できます\n"
-            "   - 作成したAPIキーはアプリの「設定」メニューから入力してください\n\n"
-            "3. **テンプレートを作成する**\n"
-            "   - 上部の「テンプレート」エリアに例を入力します\n"
-            "   - 1列目(A列)：AIに処理させたい元のデータを入力します\n"
-            "   - 2列目以降(B列～)：AIに生成させたい項目の名前を入力します\n"
-            "   - サンプルとなる入力と出力の例を最低1行入力してください\n\n"
-            "4. **AIルールを生成する**\n"
-            "   - 右側パネルの「テンプレートからルール生成」ボタンをクリックします\n"
-            "   - しばらく待つと、AIがパターンを学習してルールを自動作成します\n\n"
-            "5. **データを処理する**\n"
-            "   - 下部の「データ入力エリア」（緑枠で囲まれた部分）に処理したいデータを入力します\n"
-            "   - A列に元の値を入力します（コピー＆ペーストでOK）\n"
-            "   - 「選択行だけ処理」または「未処理を一括処理」ボタンをクリックします\n"
-            "   - AIが処理結果を各列に自動入力します\n\n"
-            "6. **結果を保存する**\n"
-            "   - メニューバーの「ファイル」→「CSV保存」を選択します\n"
-            "   - 保存先を指定すれば完了です\n"
-            "   - 最後に処理したデータは自動的にCSV形式でバックアップされており、メニューからいつでも開くことができます"
-        )
-        steps_text.setTextFormat(Qt.RichText)
-        steps_text.setOpenExternalLinks(True)
-        steps_text.setWordWrap(True)
-        steps_layout.addWidget(steps_text)
-        steps_group.setLayout(steps_layout)
-        
-        # 困ったときは？
-        trouble_group = QGroupBox("困ったときは？")
-        trouble_layout = QVBoxLayout()
-        trouble_text = QLabel(
-            "・処理に失敗した場合は「エラー」と表示されます\n"
-            "・エラーが発生した際のポップアップ画面で「ログファイルを開く」ボタンを押すと詳細情報を確認できます\n"
-            "・テンプレートを修正して「ルール再生成」ボタンを押せば、ルールを作り直すことができます\n"
-            "・ルールを手動で編集したい場合は、履歴から選択して「詳細編集」ボタンをクリックしてください"
-        )
-        trouble_text.setWordWrap(True)
-        trouble_layout.addWidget(trouble_text)
-        trouble_group.setLayout(trouble_layout)
-        
-        # 注意点
-        caution_group = QGroupBox("注意点")
-        caution_layout = QVBoxLayout()
-        caution_text = QLabel(
-            "・Gemini APIキーは無料で使用できますが、入力データはGoogleの学習データとして使用される可能性があります\n"
-            "・プライバシーやデータの機密性が重要な場合は、有料のAPIキーへの切り替えをご検討ください\n"
-            "・処理の品質を高めたい場合は、設定から高性能なAIモデルに切り替えることができます"
-        )
-        caution_text.setWordWrap(True)
-        caution_layout.addWidget(caution_text)
-        caution_group.setLayout(caution_layout)
-        
-        # スクロールエリアにウィジェットを追加
-        scroll_layout.addWidget(features_group)
-        scroll_layout.addWidget(steps_group)
-        scroll_layout.addWidget(trouble_group)
-        scroll_layout.addWidget(caution_group)
-        scroll_layout.addStretch()
-        
-        scroll_content.setLayout(scroll_layout)
-        scroll_area.setWidget(scroll_content)
-        basic_layout.addWidget(scroll_area)
-        
-        # 詳細情報タブ
-        detail_tab = QWidget()
-        detail_layout = QVBoxLayout(detail_tab)
-        
-        # テクニカル情報
-        tech_info = QTextEdit()
-        tech_info.setReadOnly(True)
-        tech_info.setHtml("""
-            <h2>開発者向け技術情報</h2>
-            
-            <h3>技術スタック</h3>
-            <ul>
-                <li><b>言語</b>: Python 3.x</li>
-                <li><b>UI</b>: PySide6 (Qt for Python)</li>
-                <li><b>AIエンジン</b>: Gemini API (google-genai)</li>
-                <li><b>データ処理</b>: 標準CSV</li>
-            </ul>
-            
-            <h3>プロジェクト構造</h3>
-            <pre>
-ExlAI
-  ├── app/              # アプリケーションコード
-  │   ├── services/     # APIやルール処理ロジック
-  │   └── ui/           # UIコンポーネント
-  ├── utils/            # ユーティリティ関数
-  ├── doc/              # ドキュメント
-  └── run_app.bat       # 起動スクリプト
-            </pre>
-            
-            <h3>コアコンポーネント</h3>
-            <ul>
-                <li><b>integrated_ui.py</b>: メインウィンドウとパネル統合</li>
-                <li><b>excel_panel.py</b>: エクセル風UIとデータテーブル</li>
-                <li><b>ai_panel.py</b>: AIルール管理と処理操作</li>
-                <li><b>rule_service.py</b>: ルール生成と適用ロジック</li>
-            </ul>
+        tab_widget.setTabPosition(QTabWidget.North)
+        tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 2px solid {self.colors['surface']};
+                background-color: {self.colors['background']};
+                border-radius: 8px;
+            }}
+            QTabBar::tab {{
+                background-color: {self.colors['surface']};
+                color: {self.colors['paragraph']};
+                padding: 12px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-weight: bold;
+                font-size: 13px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: {self.colors['accent']};
+                color: {self.colors['button_text']};
+            }}
+            QTabBar::tab:hover {{
+                background-color: {self.colors['accent']};
+                color: {self.colors['button_text']};
+            }}
         """)
         
-        detail_layout.addWidget(tech_info)
-        
-        # タブの追加
-        tab_widget.addTab(basic_tab, "基本的な使い方")
-        tab_widget.addTab(detail_tab, "詳細情報")
+        # 各タブを作成
+        tab_widget.addTab(self._create_welcome_tab(), "はじめに")
+        tab_widget.addTab(self._create_tutorial_tab(), "基本操作")
+        tab_widget.addTab(self._create_examples_tab(), "使用例")
+        tab_widget.addTab(self._create_faq_tab(), "よくある質問")
+        tab_widget.addTab(self._create_tech_tab(), "技術情報")
         
         # 閉じるボタン
         close_button = QPushButton("閉じる")
         close_button.clicked.connect(self.accept)
-        close_button.setFixedWidth(100)
+        close_button.setFixedWidth(120)
+        close_button.setFixedHeight(35)
+        close_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.colors['button']};
+                color: {self.colors['button_text']};
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {self.colors['accent']};
+                transform: translateY(-1px);
+            }}
+            QPushButton:pressed {{
+                transform: translateY(1px);
+            }}
+        """)
         
         # レイアウトに追加
-        main_layout.addLayout(header_layout)
         main_layout.addWidget(tab_widget)
         
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         button_layout.addWidget(close_button)
         main_layout.addLayout(button_layout)
+
+    def _create_header(self, main_layout, base_dir):
+        """ヘッダー部分を作成"""
+        header_frame = QFrame()
+        header_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {self.colors['surface']};
+                border: none;
+                border-radius: 16px;
+                padding: 30px;
+            }}
+        """)
+        header_frame.setMaximumHeight(140)
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setSpacing(10)
+        
+        # メインタイトル「HELP」
+        help_title = QLabel("HELP")
+        help_title.setFont(QFont("Arial", 48, QFont.Bold))
+        help_title.setStyleSheet(f"""
+            color: {self.colors['headline']}; 
+            margin: 0; 
+            padding: 0;
+            letter-spacing: 8px;
+        """)
+        help_title.setAlignment(Qt.AlignCenter)
+        
+        # サブタイトル
+        subtitle_label = QLabel("ExlAI ユーザーガイド")
+        subtitle_label.setFont(QFont("Arial", 18, QFont.Bold))
+        subtitle_label.setStyleSheet(f"""
+            color: {self.colors['paragraph']}; 
+            margin: 0; 
+            padding: 0;
+            letter-spacing: 2px;
+        """)
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        
+        # 説明文
+        desc_label = QLabel("AI powered Excel Assistant")
+        desc_label.setFont(QFont("Arial", 14))
+        desc_label.setStyleSheet(f"""
+            color: {self.colors['secondary']}; 
+            margin: 0; 
+            padding: 0;
+            letter-spacing: 1px;
+        """)
+        desc_label.setAlignment(Qt.AlignCenter)
+        
+        header_layout.addWidget(help_title)
+        header_layout.addWidget(subtitle_label)
+        header_layout.addWidget(desc_label)
+        
+        main_layout.addWidget(header_frame)
+
+    def _create_welcome_tab(self):
+        """はじめにタブを作成"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {self.colors['background']};")
+        layout = QVBoxLayout(tab)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {self.colors['background']};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['tertiary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['button']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+        """)
+        
+        content = QWidget()
+        content.setStyleSheet(f"background-color: {self.colors['background']};")
+        content_layout = QVBoxLayout(content)
+        
+        # このアプリの魅力
+        appeal_group = self._create_styled_group("このアプリの魅力", [
+            "エクセルの関数では難しい処理も、AIが自動で解決",
+            "具体例を見せるだけで、AIがパターンを学習",
+            "一度ルールを作れば、何度でも使い回し可能",
+            "CSV形式なので、Excelと完全互換",
+            "無料のAPIキーで今すぐ始められる"
+        ], "appeal")
+        
+        # こんなことができます
+        examples_group = self._create_styled_group("こんなことができます", [
+            "氏名分割: 「田中太郎」→「田中」「太郎」",
+            "文章校正: 誤字脱字の修正、適切な表現への変換",
+            "データ整形: バラバラなフォーマットを統一された形式に",
+            "分類・抽出: 文章から重要な情報を自動抽出",
+            "パターン変換: 決まったルールでデータを変換"
+        ], "examples")
+        
+        # 安心ポイント
+        safety_group = self._create_styled_group("初心者でも安心", [
+            "エラーが出ても大丈夫: 詳細なログで原因がすぐ分かる",
+            "自動バックアップ: 処理したデータは自動保存",
+            "やり直し可能: ルールはいつでも修正・再生成できる",
+            "充実のヘルプ: ステップバイステップで分かりやすく解説",
+            "無料で試せる: Gemini APIの無料枠で十分体験可能"
+        ], "safety")
+        
+        content_layout.addWidget(appeal_group)
+        content_layout.addWidget(examples_group)
+        content_layout.addWidget(safety_group)
+        content_layout.addStretch()
+        
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area)
+        
+        return tab
+
+    def _create_tutorial_tab(self):
+        """基本操作タブを作成"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {self.colors['background']};")
+        layout = QVBoxLayout(tab)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {self.colors['background']};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['tertiary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['button']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+        """)
+        
+        content = QWidget()
+        content.setStyleSheet(f"background-color: {self.colors['background']};")
+        content_layout = QVBoxLayout(content)
+        
+        # 準備段階
+        prep_group = self._create_step_group("準備: APIキーを取得しよう", "1", [
+            "① https://aistudio.google.com/app/apikey にアクセス",
+            "② Googleアカウントでログイン",
+            "③ 「Create API Key」ボタンをクリック",
+            "④ 生成されたAPIキーをコピー",
+            "⑤ ExlAIの「設定」メニューから貼り付け"
+        ], "完全無料で使えます！クレジットカード登録も不要です。")
+        
+        # テンプレート作成
+        template_group = self._create_step_group("ステップ1: テンプレートを作成", "2", [
+            "① 上部の「テンプレート」エリアを確認",
+            f"② A列に処理したい元データの例を入力",
+            f"③ B列以降に出力したい項目名を入力",
+            "④ 最低1行の入力→出力例を作成",
+            "⑤ 例が多いほど精度が向上します"
+        ], "例: A列「田中太郎」→ B列「姓」→ C列「名」")
+        
+        # ルール生成
+        rule_group = self._create_step_group("ステップ2: AIにルールを学習させる", "3", [
+            "① 右側パネルの「テンプレートからルール生成」ボタンをクリック",
+            "② AIが処理パターンを分析中... (30秒〜1分程度)",
+            "③ 生成完了のメッセージを確認",
+            "④ ルール履歴に新しいルールが追加される"
+        ], "失敗した場合: テンプレートの例を増やして再実行してください")
+        
+        # データ処理
+        process_group = self._create_step_group("ステップ3: データを一括処理", "4", [
+            "① 下部の「データ入力エリア」（緑枠）を確認",
+            "② A列に処理したいデータを入力またはコピペ",
+            "③ 「未処理を一括処理」ボタンをクリック",
+            "④ AIが各行を自動処理して結果を表示",
+            "⑤ エラー行があれば「エラー」と表示される"
+        ], "部分処理: 特定の行だけ処理したい場合は「選択行だけ処理」を使用")
+        
+        # 保存
+        save_group = self._create_step_group("ステップ4: 結果を保存", "5", [
+            "① メニューバー「ファイル」→「CSV保存」を選択",
+            "② 保存先フォルダと名前を指定",
+            "③ 保存完了！Excelで開けます",
+            "④ 最新データは自動的にバックアップされます"
+        ], "自動バックアップ: メニューから「最後の処理データを開く」で復元可能")
+        
+        content_layout.addWidget(prep_group)
+        content_layout.addWidget(template_group)
+        content_layout.addWidget(rule_group)
+        content_layout.addWidget(process_group)
+        content_layout.addWidget(save_group)
+        content_layout.addStretch()
+        
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area)
+        
+        return tab
+
+    def _create_examples_tab(self):
+        """使用例タブを作成"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {self.colors['background']};")
+        layout = QVBoxLayout(tab)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {self.colors['background']};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['tertiary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['button']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+        """)
+        
+        content = QWidget()
+        content.setStyleSheet(f"background-color: {self.colors['background']};")
+        content_layout = QVBoxLayout(content)
+        
+        # 例1: 氏名分割
+        name_example = self._create_example_group(
+            "例1: 氏名を姓と名に分割",
+            "テンプレート設定",
+            "A列: 田中太郎\nB列: 姓\nC列: 名",
+            "期待される出力",
+            "A列: 田中太郎 → B列: 田中、C列: 太郎\nA列: 佐藤花子 → B列: 佐藤、C列: 花子"
+        )
+        
+        # 例2: 住所正規化
+        address_example = self._create_example_group(
+            "例2: 住所の表記統一",
+            "テンプレート設定",
+            "A列: 東京都渋谷区1-1-1\nB列: 都道府県\nC列: 市区町村\nD列: 番地",
+            "期待される出力",
+            "A列: 東京都渋谷区1-1-1 → B列: 東京都、C列: 渋谷区、D列: 1-1-1"
+        )
+        
+        # 例3: 文章校正
+        text_example = self._create_example_group(
+            "例3: 文章の誤字脱字修正",
+            "テンプレート設定",
+            "A列: お疲れさまでした。明日の会議の資料を送付いたしまず。\nB列: 修正後",
+            "期待される出力",
+            "A列: お疲れさまでした。明日の会議の資料を送付いたしまず。\n→ B列: お疲れさまでした。明日の会議の資料を送付いたします。"
+        )
+        
+        # 例4: カテゴリ分類
+        category_example = self._create_example_group(
+            "例4: 商品のカテゴリ分類",
+            "テンプレート設定",
+            "A列: iPhone 15 Pro\nB列: カテゴリ\nC列: ブランド",
+            "期待される出力",
+            "A列: iPhone 15 Pro → B列: スマートフォン、C列: Apple\nA列: MacBook Air → B列: ノートPC、C列: Apple"
+        )
+        
+        content_layout.addWidget(name_example)
+        content_layout.addWidget(address_example)
+        content_layout.addWidget(text_example)
+        content_layout.addWidget(category_example)
+        content_layout.addStretch()
+        
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area)
+        
+        return tab
+
+    def _create_faq_tab(self):
+        """よくある質問タブを作成"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {self.colors['background']};")
+        layout = QVBoxLayout(tab)
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {self.colors['background']};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['tertiary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['button']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+        """)
+        
+        content = QWidget()
+        content.setStyleSheet(f"background-color: {self.colors['background']};")
+        content_layout = QVBoxLayout(content)
+        
+        # FAQ項目
+        faqs = [
+            {
+                "q": "エラーが表示された時は？",
+                "a": [
+                    "・まず慌てずに「ログファイルを開く」ボタンをクリック",
+                    "・エラーの詳細内容を確認できます",
+                    "・多くの場合、テンプレートの例を増やすことで解決",
+                    "・APIキーが正しく設定されているか確認",
+                    "・インターネット接続が安定しているか確認"
+                ]
+            },
+            {
+                "q": "処理の精度を上げるには？",
+                "a": [
+                    "・テンプレートの例を3〜5行に増やす",
+                    "・様々なパターンの例を含める",
+                    "・出力形式を明確に指定する",
+                    "・設定から高性能なAIモデルに変更する",
+                    "・ルールを手動で詳細編集する"
+                ]
+            },
+            {
+                "q": "料金について教えて",
+                "a": [
+                    "・Gemini APIは月15万文字まで完全無料",
+                    "・一般的な使用では無料枠で十分",
+                    "・大量処理時は有料プランへの切り替えも可能",
+                    "・処理量は設定画面で確認できます",
+                    "・アプリ自体の利用料金は一切かかりません"
+                ]
+            },
+            {
+                "q": "データのプライバシーは？",
+                "a": [
+                    "・無料APIキーの場合、Googleの学習データとして使用される可能性あり",
+                    "・機密性の高いデータは有料APIキーの使用を推奨",
+                    "・ローカルでの処理ではなく、クラウドAPI経由での処理",
+                    "・処理されたデータはアプリ内に残りません",
+                    "・詳細はGoogleのプライバシーポリシーを確認"
+                ]
+            },
+            {
+                "q": "ファイルの読み込み・保存について",
+                "a": [
+                    "・CSV形式での読み込み・保存に対応",
+                    "・Excelファイル(.xlsx)は一度CSVに変換してから読み込み",
+                    "・自動バックアップ機能で安心",
+                    "・最後の処理データはメニューからいつでも復元可能",
+                    "・文字エンコードは自動判定（UTF-8推奨）"
+                ]
+            },
+            {
+                "q": "設定のカスタマイズ",
+                "a": [
+                    "・AIモデルの種類を変更可能",
+                    "・処理タイムアウト時間の調整",
+                    "・APIキーの管理",
+                    "・ログレベルの設定",
+                    "・設定は config.json ファイルに保存されます"
+                ]
+            }
+        ]
+        
+        for faq in faqs:
+            faq_group = self._create_faq_item(faq["q"], faq["a"])
+            content_layout.addWidget(faq_group)
+        
+        content_layout.addStretch()
+        
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area)
+        
+        return tab
+
+    def _create_tech_tab(self):
+        """技術情報タブを作成"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {self.colors['background']};")
+        layout = QVBoxLayout(tab)
+        
+        tech_info = QTextEdit()
+        tech_info.setReadOnly(True)
+        tech_info.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {self.colors['background']};
+                color: {self.colors['paragraph']};
+                border: 2px solid {self.colors['surface']};
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 13px;
+                line-height: 1.6;
+            }}
+            QScrollBar:vertical {{
+                background-color: {self.colors['tertiary']};
+                width: 12px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {self.colors['button']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+        """)
+        
+        tech_info.setHtml(f"""
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: {self.colors['paragraph']};">
+                <h2 style="color: {self.colors['headline']}; border-bottom: 2px solid {self.colors['accent']}; padding-bottom: 10px;">
+                    開発者向け技術情報
+                </h2>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">技術スタック</h3>
+                <ul style="margin-left: 20px;">
+                    <li><b style="color: {self.colors['headline']};">言語</b>: Python 3.x</li>
+                    <li><b style="color: {self.colors['headline']};">UI フレームワーク</b>: PySide6 (Qt for Python)</li>
+                    <li><b style="color: {self.colors['headline']};">AI エンジン</b>: Gemini API (google-genai)</li>
+                    <li><b style="color: {self.colors['headline']};">データ処理</b>: 標準CSV、pandas互換</li>
+                    <li><b style="color: {self.colors['headline']};">パッケージング</b>: PyInstaller</li>
+                </ul>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">プロジェクト構造</h3>
+                <pre style="background-color: {self.colors['surface']}; color: {self.colors['paragraph']}; padding: 15px; border-radius: 8px; border-left: 4px solid {self.colors['accent']};">
+ExlAI/
+├── app/                    # アプリケーションコア
+│   ├── services/          # ビジネスロジック
+│   │   ├── gemini_api.py     # Gemini API連携
+│   │   └── rule_service.py   # ルール生成・適用
+│   ├── ui/                # ユーザーインターフェース
+│   │   ├── integrated_ui.py  # メインウィンドウ
+│   │   ├── excel_panel.py    # データテーブル
+│   │   ├── ai_panel.py       # AI操作パネル
+│   │   └── help_dialog.py    # ヘルプダイアログ
+│   └── workers/           # バックグラウンド処理
+├── utils/                 # ユーティリティ
+├── doc/                   # ドキュメント・画像
+├── config.json           # 設定ファイル
+├── requirements.txt      # 依存関係
+└── run_app.py           # エントリーポイント
+                </pre>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">コアコンポーネント</h3>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <tr style="background-color: {self.colors['surface']};">
+                        <th style="border: 1px solid {self.colors['secondary']}; padding: 12px; text-align: left; color: {self.colors['headline']};">ファイル</th>
+                        <th style="border: 1px solid {self.colors['secondary']}; padding: 12px; text-align: left; color: {self.colors['headline']};">役割</th>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;"><code style="color: {self.colors['accent']};">integrated_ui.py</code></td>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;">メインウィンドウと全体統合</td>
+                    </tr>
+                    <tr style="background-color: {self.colors['surface']};">
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;"><code style="color: {self.colors['accent']};">excel_panel.py</code></td>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;">エクセル風UIとデータテーブル</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;"><code style="color: {self.colors['accent']};">ai_panel.py</code></td>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;">AIルール管理と処理操作</td>
+                    </tr>
+                    <tr style="background-color: {self.colors['surface']};">
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;"><code style="color: {self.colors['accent']};">rule_service.py</code></td>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;">ルール生成・適用ロジック</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;"><code style="color: {self.colors['accent']};">gemini_api.py</code></td>
+                        <td style="border: 1px solid {self.colors['secondary']}; padding: 12px;">Gemini API連携処理</td>
+                    </tr>
+                </table>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">開発・実行環境</h3>
+                <div style="background-color: {self.colors['surface']}; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid {self.colors['accent']};">
+                    <h4 style="color: {self.colors['headline']};">開発環境セットアップ:</h4>
+                    <pre style="background-color: {self.colors['tertiary']}; color: {self.colors['paragraph']}; padding: 10px; border-radius: 6px; margin-top: 10px;">
+# 依存関係のインストール
+pip install -r requirements.txt
+
+# 開発実行
+python run_app.py
+
+# テスト実行
+python -m app.ui.integrated_ui</pre>
+                </div>
+                
+                <div style="background-color: {self.colors['surface']}; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid {self.colors['accent']};">
+                    <h4 style="color: {self.colors['headline']};">パッケージング:</h4>
+                    <pre style="background-color: {self.colors['tertiary']}; color: {self.colors['paragraph']}; padding: 10px; border-radius: 6px; margin-top: 10px;">
+# 実行可能ファイル生成
+pyinstaller --clean ExlAI.spec</pre>
+                </div>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">API連携</h3>
+                <p>AIモデルの設定は <code style="color: {self.colors['accent']};">config.json</code> で管理されています：</p>
+                <ul style="margin-left: 20px;">
+                    <li><b style="color: {self.colors['headline']};">APIキー管理</b>: 暗号化して保存</li>
+                    <li><b style="color: {self.colors['headline']};">モデル設定</b>: gemini-pro、gemini-pro-vision等</li>
+                    <li><b style="color: {self.colors['headline']};">処理オプション</b>: タイムアウト、リトライ回数等</li>
+                    <li><b style="color: {self.colors['headline']};">ログ設定</b>: デバッグレベル、出力先等</li>
+                </ul>
+                
+                <h3 style="color: {self.colors['accent']}; margin-top: 30px;">拡張開発</h3>
+                <div style="background-color: {self.colors['surface']}; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid {self.colors['accent']};">
+                    <p><b style="color: {self.colors['headline']};">新規AIモデル対応:</b> <code style="color: {self.colors['accent']};">gemini_api.py</code> を拡張</p>
+                    <p><b style="color: {self.colors['headline']};">ルール生成ロジック:</b> <code style="color: {self.colors['accent']};">rule_service.py</code> の <code style="color: {self.colors['accent']};">create_rule</code> メソッド</p>
+                    <p><b style="color: {self.colors['headline']};">UI拡張:</b> PySide6のMVCパターンに従った設計</p>
+                    <p><b style="color: {self.colors['headline']};">データ処理:</b> CSV操作はpandasライクなインターフェース</p>
+                </div>
+            </div>
+        """)
+        
+        layout.addWidget(tech_info)
+        
+        return tab
+
+    def _create_styled_group(self, title, items, group_type="default"):
+        """スタイル付きグループを作成"""
+        group = QGroupBox(title)
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 20px;
+                color: {self.colors['headline']};
+                border: 2px solid {self.colors['accent']};
+                border-radius: 12px;
+                margin-top: 15px;
+                padding-top: 18px;
+                background-color: {self.colors['surface']};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 12px 0 12px;
+                background-color: {self.colors['surface']};
+                color: {self.colors['accent']};
+            }}
+        """)
+        
+        layout = QVBoxLayout()
+        for item in items:
+            label = QLabel(f"• {item}")
+            label.setTextFormat(Qt.RichText)
+            label.setWordWrap(True)
+            label.setStyleSheet(f"""
+                margin: 10px 15px; 
+                font-size: 17px; 
+                line-height: 1.7;
+                color: {self.colors['paragraph']};
+            """)
+            layout.addWidget(label)
+        
+        group.setLayout(layout)
+        return group
+
+    def _create_step_group(self, title, step_num, items, tip):
+        """ステップ付きグループを作成"""
+        group = QGroupBox(title)
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 19px;
+                color: {self.colors['headline']};
+                border: 2px solid {self.colors['accent']};
+                border-radius: 12px;
+                margin-top: 15px;
+                padding-top: 18px;
+                background-color: {self.colors['surface']};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 12px 0 12px;
+                background-color: {self.colors['surface']};
+                color: {self.colors['accent']};
+            }}
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # ステップ内容
+        for item in items:
+            label = QLabel(item)
+            label.setTextFormat(Qt.RichText)
+            label.setOpenExternalLinks(True)
+            label.setWordWrap(True)
+            label.setStyleSheet(f"""
+                margin: 10px 15px; 
+                font-size: 17px; 
+                line-height: 1.7;
+                color: {self.colors['paragraph']};
+            """)
+            layout.addWidget(label)
+        
+        # ヒント
+        if tip:
+            tip_label = QLabel(f"💡 {tip}")
+            tip_label.setTextFormat(Qt.RichText)
+            tip_label.setWordWrap(True)
+            tip_label.setStyleSheet(f"""
+                margin: 15px; 
+                padding: 15px; 
+                background-color: {self.colors['background']}; 
+                border-left: 4px solid {self.colors['accent']}; 
+                font-size: 16px;
+                border-radius: 6px;
+                color: {self.colors['paragraph']};
+            """)
+            layout.addWidget(tip_label)
+        
+        group.setLayout(layout)
+        return group
+
+    def _create_example_group(self, title, setup_title, setup_content, output_title, output_content):
+        """使用例グループを作成"""
+        group = QGroupBox(title)
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 19px;
+                color: {self.colors['headline']};
+                border: 2px solid {self.colors['accent']};
+                border-radius: 12px;
+                margin-top: 15px;
+                padding-top: 18px;
+                background-color: {self.colors['surface']};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 12px 0 12px;
+                background-color: {self.colors['surface']};
+                color: {self.colors['accent']};
+            }}
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # セットアップ部分
+        setup_label = QLabel(f"{setup_title}:")
+        setup_label.setStyleSheet(f"margin: 10px 15px; font-size: 17px; color: {self.colors['headline']}; font-weight: bold;")
+        layout.addWidget(setup_label)
+        
+        setup_content_label = QLabel(setup_content)
+        setup_content_label.setStyleSheet(f"""
+            margin: 5px 20px; 
+            padding: 15px; 
+            background-color: {self.colors['background']}; 
+            border-radius: 6px;
+            border-left: 3px solid {self.colors['accent']};
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            color: {self.colors['paragraph']};
+        """)
+        layout.addWidget(setup_content_label)
+        
+        # 出力部分
+        output_label = QLabel(f"{output_title}:")
+        output_label.setStyleSheet(f"margin: 15px 15px 10px 15px; font-size: 17px; color: {self.colors['headline']}; font-weight: bold;")
+        layout.addWidget(output_label)
+        
+        output_content_label = QLabel(output_content)
+        output_content_label.setStyleSheet(f"""
+            margin: 5px 20px; 
+            padding: 15px; 
+            background-color: {self.colors['background']}; 
+            border-radius: 6px;
+            border-left: 3px solid {self.colors['accent']};
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            color: {self.colors['paragraph']};
+        """)
+        layout.addWidget(output_content_label)
+        
+        group.setLayout(layout)
+        return group
+
+    def _create_faq_item(self, question, answers):
+        """FAQ項目を作成"""
+        group = QGroupBox(question)
+        group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                font-size: 18px;
+                color: {self.colors['headline']};
+                border: 2px solid {self.colors['accent']};
+                border-radius: 12px;
+                margin-top: 12px;
+                padding-top: 15px;
+                background-color: {self.colors['surface']};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 12px 0 12px;
+                background-color: {self.colors['surface']};
+                color: {self.colors['accent']};
+            }}
+        """)
+        
+        layout = QVBoxLayout()
+        for answer in answers:
+            label = QLabel(answer)
+            label.setWordWrap(True)
+            label.setStyleSheet(f"""
+                margin: 8px 15px; 
+                font-size: 17px; 
+                line-height: 1.7;
+                color: {self.colors['paragraph']};
+            """)
+            layout.addWidget(label)
+        
+        group.setLayout(layout)
+        return group
 
 if __name__ == "__main__":
     # テスト用コード
