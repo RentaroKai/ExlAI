@@ -110,14 +110,14 @@ class IntegratedExcelUI(QMainWindow):
         # モード選択フレーム
         mode_frame = QFrame()
         mode_frame.setFrameShape(QFrame.StyledPanel)
-        mode_frame.setStyleSheet("background-color: #FFFFFF; border: 1px solid #CCCCCC; border-radius: 5px;")
+        mode_frame.setStyleSheet("background-color: #dadfdd; border: 1px solid #CCCCCC; border-radius: 5px;")
         
         # フレームの高さを固定し、縮小しないよう設定
-        mode_frame.setFixedHeight(50)  # 高さを50pxに固定
+        mode_frame.setFixedHeight(40)  # 高さを40pxに固定（50px→40px：20%削減）
         mode_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 垂直方向のサイズポリシーを固定に設定
         
         mode_layout = QHBoxLayout(mode_frame)
-        mode_layout.setContentsMargins(15, 10, 15, 10)
+        mode_layout.setContentsMargins(10, 5, 10, 5)  # パディング削減（15,10,15,10 → 10,5,10,5）
         mode_layout.setSpacing(20)
         
         # モード選択ラベル

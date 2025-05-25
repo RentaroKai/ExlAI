@@ -186,7 +186,7 @@ class DropAreaLabel(QLabel):
                 background-color: #F8F9FA;
                 color: #666666;
                 font-size: 12px;
-                padding: 20px;
+                padding: 15px;
                 margin: 5px;
             }
             QLabel:hover {
@@ -195,7 +195,7 @@ class DropAreaLabel(QLabel):
             }
         """)
         self.setText("ファイルをここにドラッグ&ドロップ\n対応形式: JPG, PNG, MP4")
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(64)  # 80px → 64px（20%削減）
         self.parent_panel = parent
         self.target_table = target_table  # "sample" または "data"
         
@@ -871,7 +871,7 @@ class ExcelPanel(QWidget):
             self.sample_drop_area.setText(sample_text)
             self.data_drop_area.setText(data_text)
             
-            # ドラッグ&ドロップエリアのスタイルを微調整
+            # ドラッグ&ドロップエリアのスタイルを微調整（第二段階改善：パディング削減）
             enhanced_style = """
                 QLabel {
                     border: 2px dashed #4B918B;
@@ -880,7 +880,7 @@ class ExcelPanel(QWidget):
                     color: #2C5F5D;
                     font-size: 11px;
                     font-weight: bold;
-                    padding: 15px;
+                    padding: 12px;
                     margin: 5px;
                 }
                 QLabel:hover {
