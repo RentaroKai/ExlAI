@@ -1,6 +1,7 @@
 import sys
 import logging
 from app.services.rule_service import RuleService, ProcessMode
+from app.workers.ai_worker import RuleCreationWorker
 import os, json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                               QLabel, QGroupBox, QToolButton, QFrame, QToolTip, QMenu, QDialog, QMessageBox)
@@ -367,7 +368,7 @@ class AIPanel(QWidget):
                 text = item.text() if item else ''
                 output[header] = text
             samples.append({'input': input_item.text(), 'output': output, 'fields': headers[2:]})
-        # ルール生成または再生成API呼び出し
+        
         # UIロックとスピナー表示
         self.auto_generate_btn.setEnabled(False)
         self.rule_detail_btn.setEnabled(False)
@@ -375,14 +376,24 @@ class AIPanel(QWidget):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         QApplication.processEvents()
         logger.info(f"ルール生成開始: 入力サンプル数={len(samples)}件")
+        
+        # RuleCreationWorkerを使用して非同期実行
+        self.rule_creation_worker = RuleCreationWorker(
+            self.rule_service,
+            samples,
+            self.current_mode,
+            old_rule_id  # 新規作成時はNone、再生成時はルールID
+        )
+        self.rule_creation_worker.finished.connect(self.on_rule_creation_finished)
+        self.rule_creation_worker.error_occurred.connect(self.on_rule_creation_error)
+        self.rule_creation_worker.start()
+
+    def on_rule_creation_finished(self, metadata):
+        """ルール作成・再生成完了時の処理"""
         try:
-            # ルール作成 or 再生成（現在のモードを渡す）
-            if old_rule_id is None:
-                metadata = self.rule_service.create_rule(samples, self.current_mode)
-            else:
-                metadata = self.rule_service.regenerate_rule(old_rule_id, samples, self.current_mode)
             new_id = metadata.get('id')
-            new_title = metadata.get('rule_name')
+            new_title = metadata.get('rule_name', metadata.get('title', ''))
+            
             # UIにルールを追加
             if new_id not in self.history_rules:
                 self.rules_data.append(metadata)
@@ -390,30 +401,33 @@ class AIPanel(QWidget):
                 self.rule_map[new_id] = metadata
                 # 履歴メニューを再構築（モード別フィルタリング適用）
                 self.create_history_menu()
-            # 旧ルールをメニューから削除（再生成時）
-            if old_rule_id is not None and old_rule_id != new_id:
-                # 履歴メニューを再構築（削除されたルールは自動的に除外される）
-                self.create_history_menu()
+            
             # 新ルールを適用
             self.apply_history_rule(new_id)
             # 新規作成完了後は新規作成モードに
             self.is_new_rule_mode = True
             self.update_tab_styles()
             logger.info(f"ルール生成完了: id={new_id}, title='{new_title}', mode={self.current_mode}")
-        except NotImplementedError:
-            logger.error("create_rule未実装")
-            QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
-                              "ルール生成機能が未実装です", self)
+            
         except Exception as e:
-            logger.error(f"ルール生成エラー: {e}")
-            QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
-                              f"ルール生成中にエラーが発生しました: {e}", self)
+            logger.error(f"ルール生成後処理エラー: {e}")
         finally:
             # UIロック解除とカーソル復帰
             self.auto_generate_btn.setEnabled(True)
             self.rule_detail_btn.setEnabled(True)
             self.history_btn.setEnabled(True)
             QApplication.restoreOverrideCursor()
+
+    def on_rule_creation_error(self, error_message):
+        """ルール作成・再生成エラー時の処理"""
+        logger.error(f"ルール生成エラー: {error_message}")
+        QToolTip.showText(self.auto_generate_btn.mapToGlobal(self.auto_generate_btn.rect().center()),
+                          f"ルール生成中にエラーが発生しました: {error_message}", self)
+        # UIロック解除とカーソル復帰
+        self.auto_generate_btn.setEnabled(True)
+        self.rule_detail_btn.setEnabled(True)
+        self.history_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
 
     def delete_current_rule(self):
         """選択中のルールを削除する"""

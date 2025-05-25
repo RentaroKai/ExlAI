@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List, Union, Iterator
 import json
 import time
 import httplib2
+import asyncio
 
 from google import genai
 from google.genai import types
@@ -318,8 +319,8 @@ class GeminiAPI:
             logger.error(f"議事録要約エラー: {e}")
             return ""
 
-    def analyze_image(self, file_path: str, prompt: str) -> str:
-        """画像を解析してテキストを生成する
+    async def analyze_image(self, file_path: str, prompt: str) -> str:
+        """画像を解析してテキストを生成する（非同期版）
         
         Args:
             file_path (str): 解析する画像ファイルのパス
@@ -332,26 +333,33 @@ class GeminiAPI:
             GeminiAPIError: 解析に失敗した場合
         """
         try:
-            logger.info(f"Starting image analysis: {os.path.basename(file_path)}")
+            logger.info(f"🎯 [非同期] Starting image analysis: {os.path.basename(file_path)}")
+            logger.debug(f"🔧 [非同期] Image analysis prompt length: {len(prompt)} characters")
             start_time = time.time()
             
             # ファイルサイズのチェック
-            self._check_file_size(file_path)
+            logger.debug(f"📏 [非同期] Checking file size for: {file_path}")
+            await asyncio.to_thread(self._check_file_size, file_path)
+            logger.debug(f"✅ [非同期] File size check completed")
             
             # 画像ファイルをアップロード
-            logger.info(f"Uploading image for analysis: {file_path}")
-            uploaded_file = self.client.files.upload(file=file_path)
-            logger.info(f"Image uploaded successfully: {uploaded_file.uri}")
+            logger.info(f"⬆️ [非同期] Uploading image for analysis: {file_path}")
+            uploaded_file = await asyncio.to_thread(self.client.files.upload, file=file_path)
+            logger.info(f"✅ [非同期] Image uploaded successfully: {uploaded_file.uri}")
             upload_time = time.time() - start_time
-            logger.debug(f"Upload completed in {upload_time:.2f} seconds")
+            logger.debug(f"⏱️ [非同期] Upload completed in {upload_time:.2f} seconds")
             
             # ファイル処理の完了を待機
-            if not self.wait_for_processing(uploaded_file):
+            logger.debug(f"⏳ [非同期] Waiting for image processing completion...")
+            if not await asyncio.to_thread(self.wait_for_processing, uploaded_file):
                 raise GeminiAPIError("画像ファイルの処理が完了しませんでした")
+            logger.debug(f"✅ [非同期] Image processing completed")
             
             # 画像解析の実行 (最新APIでは uploaded_file を直接 contents に渡す)
             analysis_start = time.time()
-            response = self.client.models.generate_content(
+            logger.info(f"🤖 [非同期] Starting AI image analysis...")
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.transcription_model,
                 contents=[prompt, uploaded_file],
                 config=types.GenerateContentConfig(
@@ -362,35 +370,37 @@ class GeminiAPI:
                 )
             )
             analysis_time = time.time() - analysis_start
-            logger.debug(f"Image analysis completed in {analysis_time:.2f} seconds")
+            logger.debug(f"🎯 [非同期] Image AI analysis completed in {analysis_time:.2f} seconds")
             
             # ファイルを削除（オプション：リソース節約のため）
             try:
-                self.client.files.delete(name=uploaded_file.name)
-                logger.info(f"Temporary image file deleted: {uploaded_file.name}")
+                logger.debug(f"🗑️ [非同期] Deleting temporary image file...")
+                await asyncio.to_thread(self.client.files.delete, name=uploaded_file.name)
+                logger.info(f"✅ [非同期] Temporary image file deleted: {uploaded_file.name}")
             except Exception as e:
-                logger.warning(f"Failed to delete temporary file: {e}")
+                logger.warning(f"⚠️ [非同期] Failed to delete temporary file: {e}")
             
             result = response.text
             total_time = time.time() - start_time
-            logger.info(f"Image analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
+            logger.info(f"🎉 [非同期] Image analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
             return result
             
         except FileNotFoundError as e:
             error_msg = f"画像ファイルが見つかりません: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
             raise GeminiAPIError(error_msg)
         except VideoFileTooLargeError as e:
             error_msg = f"画像ファイルサイズエラー: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
             raise GeminiAPIError(error_msg)
         except Exception as e:
             error_msg = f"画像解析に失敗しました: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
+            logger.debug(f"🔍 [非同期] Image analysis error details: {type(e).__name__}: {e}")
             raise GeminiAPIError(error_msg)
 
-    def analyze_video(self, file_path: str, prompt: str) -> str:
-        """動画を解析してテキストを生成する
+    async def analyze_video(self, file_path: str, prompt: str) -> str:
+        """動画を解析してテキストを生成する（非同期版）
         
         Args:
             file_path (str): 解析する動画ファイルのパス
@@ -403,30 +413,35 @@ class GeminiAPI:
             GeminiAPIError: 解析に失敗した場合
         """
         try:
-            logger.info(f"Starting video analysis: {os.path.basename(file_path)}")
+            logger.info(f"🎬 [非同期] Starting video analysis: {os.path.basename(file_path)}")
+            logger.debug(f"🔧 [非同期] Video analysis prompt length: {len(prompt)} characters")
             start_time = time.time()
             
             # ファイルサイズのチェック
-            self._check_file_size(file_path)
+            logger.debug(f"📏 [非同期] Checking file size for: {file_path}")
+            await asyncio.to_thread(self._check_file_size, file_path)
+            logger.debug(f"✅ [非同期] File size check completed")
             
             # 動画ファイルをアップロード
-            logger.info(f"Uploading video for analysis: {file_path}")
-            uploaded_file = self.client.files.upload(file=file_path)
-            logger.info(f"Video uploaded successfully: {uploaded_file.uri}")
+            logger.info(f"⬆️ [非同期] Uploading video for analysis: {file_path}")
+            uploaded_file = await asyncio.to_thread(self.client.files.upload, file=file_path)
+            logger.info(f"✅ [非同期] Video uploaded successfully: {uploaded_file.uri}")
             upload_time = time.time() - start_time
-            logger.debug(f"Upload completed in {upload_time:.2f} seconds")
+            logger.debug(f"⏱️ [非同期] Upload completed in {upload_time:.2f} seconds")
             
             # ファイル処理の完了を待機（動画は時間がかかる場合があります）
-            logger.info("Waiting for video processing to complete...")
-            if not self.wait_for_processing(uploaded_file):
+            logger.info(f"⏳ [非同期] Waiting for video processing to complete...")
+            if not await asyncio.to_thread(self.wait_for_processing, uploaded_file):
                 raise GeminiAPIError("動画ファイルの処理が完了しませんでした")
             
             processing_time = time.time() - start_time
-            logger.debug(f"Video processing completed in {processing_time:.2f} seconds")
+            logger.debug(f"✅ [非同期] Video processing completed in {processing_time:.2f} seconds")
             
             # 動画解析の実行 (最新APIでは uploaded_file を直接 contents に渡す)
             analysis_start = time.time()
-            response = self.client.models.generate_content(
+            logger.info(f"🤖 [非同期] Starting AI video analysis...")
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.transcription_model,
                 contents=[prompt, uploaded_file],
                 config=types.GenerateContentConfig(
@@ -437,35 +452,37 @@ class GeminiAPI:
                 )
             )
             analysis_time = time.time() - analysis_start
-            logger.debug(f"Video analysis completed in {analysis_time:.2f} seconds")
+            logger.debug(f"🎬 [非同期] Video AI analysis completed in {analysis_time:.2f} seconds")
             
             # ファイルを削除（オプション：リソース節約のため）
             try:
-                self.client.files.delete(name=uploaded_file.name)
-                logger.info(f"Temporary video file deleted: {uploaded_file.name}")
+                logger.debug(f"🗑️ [非同期] Deleting temporary video file...")
+                await asyncio.to_thread(self.client.files.delete, name=uploaded_file.name)
+                logger.info(f"✅ [非同期] Temporary video file deleted: {uploaded_file.name}")
             except Exception as e:
-                logger.warning(f"Failed to delete temporary file: {e}")
+                logger.warning(f"⚠️ [非同期] Failed to delete temporary file: {e}")
             
             result = response.text
             total_time = time.time() - start_time
-            logger.info(f"Video analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
+            logger.info(f"🎉 [非同期] Video analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
             return result
             
         except FileNotFoundError as e:
             error_msg = f"動画ファイルが見つかりません: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
             raise GeminiAPIError(error_msg)
         except VideoFileTooLargeError as e:
             error_msg = f"動画ファイルサイズエラー: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
             raise GeminiAPIError(error_msg)
         except Exception as e:
             error_msg = f"動画解析に失敗しました: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ [非同期] {error_msg}")
+            logger.debug(f"🔍 [非同期] Video analysis error details: {type(e).__name__}: {e}")
             raise GeminiAPIError(error_msg)
 
-    def analyze_media(self, file_path: str, prompt: str, media_type: str = None) -> str:
-        """メディアファイル（画像・動画）を解析してテキストを生成する汎用メソッド
+    async def analyze_media(self, file_path: str, prompt: str, media_type: str = None) -> str:
+        """メディアファイル（画像・動画）を解析してテキストを生成する汎用メソッド（非同期版）
         
         Args:
             file_path (str): 解析するメディアファイルのパス
@@ -492,8 +509,8 @@ class GeminiAPI:
         
         # メディアタイプに応じて適切なメソッドを呼び出し
         if media_type == MediaType.IMAGE:
-            return self.analyze_image(file_path, prompt)
+            return await self.analyze_image(file_path, prompt)
         elif media_type == MediaType.VIDEO:
-            return self.analyze_video(file_path, prompt)
+            return await self.analyze_video(file_path, prompt)
         else:
             raise ValueError(f"サポートされていないメディアタイプです: {media_type}") 

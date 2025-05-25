@@ -8,6 +8,7 @@ import sys
 import shutil
 from pathlib import Path
 import time
+import asyncio
 
 from utils.config import config_manager
 from .gemini_api import GeminiAPI, GeminiAPIError
@@ -186,8 +187,8 @@ class RuleService:
             logger.error(f"プロンプト生成エラー: {e}")
             return ""
 
-    def _generate_media_rule_prompt(self, samples: List[Dict[str, Any]], fields: List[str], mode: str) -> str:
-        """画像・動画モード用のルールプロンプト生成"""
+    async def _generate_media_rule_prompt(self, samples: List[Dict[str, Any]], fields: List[str], mode: str) -> str:
+        """画像・動画モード用のルールプロンプト生成（非同期版）"""
         logger.info(f"🎬 Starting media rule prompt generation for mode: {mode}")
         logger.info(f"📊 Input samples count: {len(samples)}, Fields: {fields}")
         
@@ -226,12 +227,12 @@ class RuleService:
                 logger.debug(f"🤖 Media analysis prompt: {analysis_prompt}")
                 logger.info(f"🚀 Starting {mode} analysis via Gemini API...")
                 
-                # モードに応じて解析APIを呼び出し
+                # モードに応じて解析APIを呼び出し（非同期）
                 analysis_start_time = time.time()
                 if mode == ProcessMode.IMAGE:
-                    analysis_result = self.gemini.analyze_image(file_path, analysis_prompt)
+                    analysis_result = await self.gemini.analyze_image(file_path, analysis_prompt)
                 else:  # VIDEO
-                    analysis_result = self.gemini.analyze_video(file_path, analysis_prompt)
+                    analysis_result = await self.gemini.analyze_video(file_path, analysis_prompt)
                 
                 analysis_time = time.time() - analysis_start_time
                 logger.info(f"✅ Analysis completed in {analysis_time:.2f} seconds")
@@ -324,7 +325,7 @@ class RuleService:
             logger.error(f"❌ {media_type_name}プロンプト生成エラー: {e}")
             return ""
 
-    def create_rule(self, samples: List[Dict[str, Any]], mode: str = ProcessMode.NORMAL) -> Dict[str, Any]:
+    async def create_rule(self, samples: List[Dict[str, Any]], mode: str = ProcessMode.NORMAL) -> Dict[str, Any]:
         """
         新規ルールをAIに生成させ、ローカルに保存 (3ステップ：prompt/json例/title)
         引数 samples: [{"input": str, "output": Dict[str,str], "fields": List[str]}]
@@ -347,7 +348,7 @@ class RuleService:
         if mode in [ProcessMode.IMAGE, ProcessMode.VIDEO]:
             # 画像・動画モードの場合：実際のファイル内容を解析してプロンプト生成
             logger.info(f"Processing {mode} mode rule creation with file analysis")
-            rule_prompt = self._generate_media_rule_prompt(samples, fields, mode)
+            rule_prompt = await self._generate_media_rule_prompt(samples, fields, mode)
         else:
             # テキストモードの場合：従来の処理
             logger.info("Processing normal mode rule creation")
@@ -386,38 +387,35 @@ class RuleService:
         try:
             data = json.loads(json_str)
             rule_name = data.get("rule_name", "").strip()
-            logger.info(f"Generated rule title: {rule_name}")
-        except Exception as e:
-            logger.error(f"タイトルJSONパースエラー: {e}, raw text: '{text}'")
-            # フォールバックで生テキストをタイトルとして使用
-            rule_name = text if text else f"ルール生成 {now}" # 空文字の場合はデフォルト名
-            logger.warning(f"Using raw text or default as title: {rule_name}")
+        except json.JSONDecodeError:
+            logger.warning("ルール名生成レスポンスのJSON解析に失敗")
+            rule_name = f"ルール_{now}"
+        if not rule_name:
+            rule_name = f"ルール_{now}"
+        logger.info(f"Generated rule title: {rule_name}")
 
+        # --- 新規ルールを保存 ---
+        # 新しいIDを生成（既存の最大値+1）
+        max_id = max([r.get("id", 0) for r in self._rules], default=0)
+        new_id = max_id + 1
 
-        # --- ルールオブジェクト作成・保存 ---
-        rule_obj = {
+        new_rule = {
             "title": rule_name,
             "prompt": rule_prompt,
             "json_format_example": json_format_example,
             "sample_data": sample_data,
-            "mode": mode  # モード情報を追加
+            "mode": mode,
+            "id": new_id,
+            "rule_name": rule_name  # UI側の互換性のため
         }
-        # 新規ID付与
-        existing_ids = [r.get("id", -1) for r in self._rules]
-        new_id = max(existing_ids) + 1 if existing_ids else 0
-        rule_obj["id"] = new_id
+        
+        self._rules.append(new_rule)
         logger.info(f"Assigned id={new_id} to new rule '{rule_name}' with mode={mode}")
-        # ローカルファイルに保存
-        self._rules.append(rule_obj)
         self._save_rules()
         logger.info(f"Rule id={new_id} ('{rule_name}') created and saved with mode={mode}.")
+        return new_rule
 
-        # 戻り値用メタデータ
-        metadata = rule_obj.copy()
-        metadata['rule_name'] = rule_name
-        return metadata
-
-    def regenerate_rule(self, rule_id: int, samples: List[Dict[str, Any]], mode: str = None) -> Dict[str, Any]:
+    async def regenerate_rule(self, rule_id: int, samples: List[Dict[str, Any]], mode: str = None) -> Dict[str, Any]:
         """
         既存ルールを再生成し、更新する
         """
@@ -441,7 +439,7 @@ class RuleService:
         logger.info(f"Regenerating rule id={rule_id} with mode={mode}...")
         # 新しいサンプルデータでルールを作成 (create_ruleを呼び出す)
         try:
-            new_rule_metadata = self.create_rule(samples, mode)
+            new_rule_metadata = await self.create_rule(samples, mode)
             # 追加: create_rule後のデバッグログ
             logger.debug(f"After create_rule: metadata returned={new_rule_metadata}")
             logger.debug(f"Current rule IDs after create: {[r.get('id') for r in self._rules]}")
@@ -502,7 +500,7 @@ class RuleService:
             return False
 
 
-    def apply_rule(self, rule_id: int, inputs: List[str]) -> List[Dict[str, Any]]:
+    async def apply_rule(self, rule_id: int, inputs: List[str]) -> List[Dict[str, Any]]:
         """
         指定したルールを入力リストに適用し、結果を返却
         (注: 現在の実装はサンプルデータとの完全一致のみ。将来的にはAI適用が必要)
@@ -571,12 +569,12 @@ class RuleService:
                         media_prompt += f"\n回答は以下のJSONフォーマットで返してください:\n"
                         media_prompt += json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2)
                         
-                        # 画像・動画解析APIを呼び出し
+                        # 画像・動画解析APIを呼び出し（非同期）
                         logger.debug(f"メディア解析プロンプト:\n{media_prompt}")
                         if rule_mode == ProcessMode.IMAGE:
-                            ai_response = self.gemini.analyze_image(inp, media_prompt)
+                            ai_response = await self.gemini.analyze_image(inp, media_prompt)
                         else:  # VIDEO
-                            ai_response = self.gemini.analyze_video(inp, media_prompt)
+                            ai_response = await self.gemini.analyze_video(inp, media_prompt)
                         
                         # レスポンスをJSON解析
                         text = ai_response.strip()
