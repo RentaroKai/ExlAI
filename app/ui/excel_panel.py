@@ -611,6 +611,75 @@ class ExcelPanel(QWidget):
                 color: #3A506B;
                 border: 1px solid #D1D9E6;
             }
+            
+            /* 🎨 モダンなスクロールバー設定：ホバー時のみ表示 + 薄型デザイン */
+            QScrollBar:vertical {
+                background-color: transparent;
+                width: 8px;
+                border: none;
+                border-radius: 4px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: rgba(75, 145, 139, 0.0);
+                border-radius: 4px;
+                min-height: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: rgba(75, 145, 139, 0.6);
+            }
+            QScrollBar::handle:vertical:pressed {
+                background-color: rgba(75, 145, 139, 0.8);
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            
+            QScrollBar:horizontal {
+                background-color: transparent;
+                height: 8px;
+                border: none;
+                border-radius: 4px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: rgba(75, 145, 139, 0.0);
+                border-radius: 4px;
+                min-width: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: rgba(75, 145, 139, 0.6);
+            }
+            QScrollBar::handle:horizontal:pressed {
+                background-color: rgba(75, 145, 139, 0.8);
+            }
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {
+                border: none;
+                background: none;
+                width: 0px;
+            }
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {
+                background: none;
+            }
+            
+            /* テーブルホバー時にスクロールバーを表示 */
+            QTableWidget:hover QScrollBar::handle:vertical {
+                background-color: rgba(75, 145, 139, 0.4);
+            }
+            QTableWidget:hover QScrollBar::handle:horizontal {
+                background-color: rgba(75, 145, 139, 0.4);
+            }
         """)
         table.horizontalHeader().setFixedHeight(30)
         table.horizontalHeader().setStretchLastSection(False)

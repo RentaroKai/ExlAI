@@ -27,8 +27,47 @@ class AIPanel(QWidget):
         
     def setup_ui(self):
         """AIパネルのUI設定"""
-        # レイアウト設定
-        self.setStyleSheet("background-color: #333333; color: #FFFFFF;")  # 背景色をダークグレーに変更
+        # レイアウト設定とモダンなスクロールバー
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #333333; 
+                color: #FFFFFF;
+            }
+            
+            /* 🎨 AIパネル用モダンスクロールバー */
+            QScrollArea QScrollBar:vertical {
+                background-color: transparent;
+                width: 8px;
+                border: none;
+                border-radius: 4px;
+                margin: 0px;
+            }
+            QScrollArea QScrollBar::handle:vertical {
+                background-color: rgba(255, 255, 255, 0.0);
+                border-radius: 4px;
+                min-height: 20px;
+                margin: 2px;
+            }
+            QScrollArea QScrollBar::handle:vertical:hover {
+                background-color: rgba(255, 255, 255, 0.4);
+            }
+            QScrollArea QScrollBar::handle:vertical:pressed {
+                background-color: rgba(255, 255, 255, 0.6);
+            }
+            QScrollArea QScrollBar::add-line:vertical,
+            QScrollArea QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollArea QScrollBar::add-page:vertical,
+            QScrollArea QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            QScrollArea:hover QScrollBar::handle:vertical {
+                background-color: rgba(255, 255, 255, 0.3);
+            }
+        """)  # 背景色をダークグレーに変更
         ai_layout = QVBoxLayout(self)
         ai_layout.setContentsMargins(5, 5, 5, 15)
         ai_layout.setSpacing(5)  # 均等な余白

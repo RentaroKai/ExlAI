@@ -63,7 +63,73 @@ class IntegratedExcelUI(QMainWindow):
         
         # メインウィジェット
         central_widget = QWidget()
-        central_widget.setStyleSheet("background-color: #dadfdd; color: #333333;")
+        central_widget.setStyleSheet("""
+            QWidget {
+                background-color: #dadfdd; 
+                color: #333333;
+            }
+            
+            /* 🎨 メインウィンドウ用モダンスクロールバー */
+            QScrollBar:vertical {
+                background-color: transparent;
+                width: 8px;
+                border: none;
+                border-radius: 4px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: rgba(75, 145, 139, 0.0);
+                border-radius: 4px;
+                min-height: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: rgba(75, 145, 139, 0.5);
+            }
+            QScrollBar::handle:vertical:pressed {
+                background-color: rgba(75, 145, 139, 0.7);
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            
+            QScrollBar:horizontal {
+                background-color: transparent;
+                height: 8px;
+                border: none;
+                border-radius: 4px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: rgba(75, 145, 139, 0.0);
+                border-radius: 4px;
+                min-width: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: rgba(75, 145, 139, 0.5);
+            }
+            QScrollBar::handle:horizontal:pressed {
+                background-color: rgba(75, 145, 139, 0.7);
+            }
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {
+                border: none;
+                background: none;
+                width: 0px;
+            }
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {
+                background: none;
+            }
+        """)
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
