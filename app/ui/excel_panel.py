@@ -4,7 +4,7 @@ import os
 import subprocess
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                               QTableWidgetItem, QFrame, QLabel, QSplitter,
-                              QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider, QMessageBox)
+                              QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider, QMessageBox, QMenu)
 from PySide6.QtCore import Qt, QMimeData
 from PySide6.QtGui import QFont, QColor, QBrush, QPen, QKeySequence, QDragEnterEvent, QDropEvent
 
@@ -22,10 +22,159 @@ class CustomTableWidget(QTableWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.open_context_menu)
         
+        # ヘッダーの右クリックメニューを設定
+        self.setup_header_context_menus()
+        
     def setVerticalHeaderLabels(self, labels):
         for i, label in enumerate(labels):
             item = QTableWidgetItem(label)
             self.setVerticalHeaderItem(i, item)
+    
+    def setup_header_context_menus(self):
+        """ヘッダーの右クリックメニューを設定"""
+        # 水平ヘッダー（列ヘッダー）の右クリックメニュー
+        self.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.horizontalHeader().customContextMenuRequested.connect(self.show_column_context_menu)
+        
+        # 垂直ヘッダー（行ヘッダー）の右クリックメニュー
+        self.verticalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.verticalHeader().customContextMenuRequested.connect(self.show_row_context_menu)
+    
+    def show_column_context_menu(self, position):
+        """列ヘッダーの右クリックメニューを表示"""
+        from PySide6.QtWidgets import QMenu
+        
+        # クリックされた列を特定
+        column = self.horizontalHeader().logicalIndexAt(position)
+        if column == -1:
+            return
+            
+        menu = QMenu(self)
+        
+        # 列の挿入
+        insert_left_act = menu.addAction(f"列を左に挿入")
+        insert_right_act = menu.addAction(f"列を右に挿入")
+        
+        menu.addSeparator()
+        
+        # 列の削除（保護された列はメニューを無効化）
+        delete_act = menu.addAction(f"列を削除")
+        if self.is_protected_column(column):
+            delete_act.setEnabled(False)
+            delete_act.setText(f"列を削除（保護済み）")
+        
+        # メニューを実行
+        action = menu.exec(self.horizontalHeader().mapToGlobal(position))
+        
+        if action == insert_left_act:
+            self.insert_column(column)
+            logger.info(f"列を左に挿入: 列{column}")
+        elif action == insert_right_act:
+            self.insert_column(column + 1)
+            logger.info(f"列を右に挿入: 列{column + 1}")
+        elif action == delete_act and not self.is_protected_column(column):
+            self.delete_column(column)
+            logger.info(f"列を削除: 列{column}")
+    
+    def show_row_context_menu(self, position):
+        """行ヘッダーの右クリックメニューを表示"""
+        from PySide6.QtWidgets import QMenu
+        
+        # クリックされた行を特定
+        row = self.verticalHeader().logicalIndexAt(position)
+        if row == -1:
+            return
+            
+        menu = QMenu(self)
+        
+        # 行の挿入
+        insert_above_act = menu.addAction(f"行を上に挿入")
+        insert_below_act = menu.addAction(f"行を下に挿入")
+        
+        menu.addSeparator()
+        
+        # 行の削除（保護された行はメニューを無効化）
+        delete_act = menu.addAction(f"行を削除")
+        if self.is_protected_row(row):
+            delete_act.setEnabled(False)
+            delete_act.setText(f"行を削除（保護済み）")
+        
+        # メニューを実行
+        action = menu.exec(self.verticalHeader().mapToGlobal(position))
+        
+        if action == insert_above_act:
+            self.insert_row(row)
+            logger.info(f"行を上に挿入: 行{row}")
+        elif action == insert_below_act:
+            self.insert_row(row + 1)
+            logger.info(f"行を下に挿入: 行{row + 1}")
+        elif action == delete_act and not self.is_protected_row(row):
+            self.delete_row(row)
+            logger.info(f"行を削除: 行{row}")
+    
+    def is_protected_column(self, column):
+        """保護された列かどうかを判定"""
+        # 列0 (AI進捗列) と 列1 (A列「元の値」) は保護
+        return column in [0, 1]
+    
+    def is_protected_row(self, row):
+        """保護された行かどうかを判定"""
+        # 行0 (ヘッダー行) は保護
+        return row == 0
+    
+    def insert_column(self, column):
+        """指定位置に列を挿入"""
+        self.insertColumn(column)
+        
+        # 新しい列のヘッダーラベルを設定
+        new_label = self.get_column_label_for_index(column)
+        self.setHorizontalHeaderItem(column, QTableWidgetItem(new_label))
+        
+        # 既存の列ラベルを更新（右側の列のラベルがずれるため）
+        self.update_column_labels()
+    
+    def insert_row(self, row):
+        """指定位置に行を挿入"""
+        self.insertRow(row)
+        
+        # 新しい行のAI進捗列（列0）に「未処理」を設定
+        if self.columnCount() > 0:
+            status_item = QTableWidgetItem("未処理")
+            status_item.setTextAlignment(Qt.AlignCenter)
+            self.setItem(row, 0, status_item)
+    
+    def delete_column(self, column):
+        """指定列を削除（保護されていない場合のみ）"""
+        if not self.is_protected_column(column):
+            self.removeColumn(column)
+            # 列ラベルを更新
+            self.update_column_labels()
+    
+    def delete_row(self, row):
+        """指定行を削除（保護されていない場合のみ）"""
+        if not self.is_protected_row(row):
+            self.removeRow(row)
+    
+    def get_column_label_for_index(self, column):
+        """列インデックスに対応するラベルを取得"""
+        if column == 0:
+            return ""  # AI進捗列
+        elif column == 1:
+            return "A"
+        else:
+            # B, C, D, ... AA, AB, AC... のように生成
+            col_index = column - 1  # A=0, B=1, C=2...
+            label = ""
+            while col_index >= 0:
+                label = chr(ord('A') + (col_index % 26)) + label
+                col_index = col_index // 26 - 1
+            return label
+    
+    def update_column_labels(self):
+        """全ての列ラベルを更新"""
+        for col in range(self.columnCount()):
+            label = self.get_column_label_for_index(col)
+            self.setHorizontalHeaderItem(col, QTableWidgetItem(label))
 
     def keyPressEvent(self, event):
         # Ctrl+Vで大量貼り付け時にテーブルを自動拡張する
