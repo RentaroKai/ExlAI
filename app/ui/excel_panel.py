@@ -1,6 +1,7 @@
 import sys
 import logging
 import os
+import subprocess
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                               QTableWidgetItem, QFrame, QLabel, QSplitter,
                               QHeaderView, QAbstractItemView, QStyledItemDelegate, QSlider, QMessageBox)
@@ -52,12 +53,36 @@ class CustomTableWidget(QTableWidget):
         super().keyPressEvent(event)
 
     def open_context_menu(self, position):
-        """右クリックメニューを表示し、コピー・ペースト・クリアを提供する"""
+        """右クリックメニューを表示し、コピー・ペースト・クリア・ファイルを開くを提供する"""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         copy_act = menu.addAction("コピー")
         paste_act = menu.addAction("ペースト")
         clear_act = menu.addAction("クリア")
+        
+        # 区切り線を追加
+        menu.addSeparator()
+        
+        # ファイルを開くメニューを追加
+        open_file_act = menu.addAction("ファイルを開く")
+        
+        # 選択されたセルの情報を取得してメニューの有効/無効を判定
+        current_item = self.itemAt(position)
+        file_path = ""
+        if current_item and current_item.text():
+            file_path = current_item.text().strip()
+        
+        # ファイルを開くメニューの有効/無効を設定
+        if file_path and self.is_valid_file_path(file_path):
+            open_file_act.setEnabled(True)
+            if self.is_media_file(file_path):
+                open_file_act.setText("📁 ファイルを開く")
+            else:
+                open_file_act.setText("📄 ファイルを開く")
+        else:
+            open_file_act.setEnabled(False)
+            open_file_act.setText("ファイルを開く（無効）")
+        
         action = menu.exec(self.viewport().mapToGlobal(position))
         if action == copy_act:
             logger.debug("ContextMenu: コピー選択")
@@ -68,6 +93,9 @@ class CustomTableWidget(QTableWidget):
         elif action == clear_act:
             logger.debug("ContextMenu: クリア選択")
             self.clear_selection()
+        elif action == open_file_act:
+            logger.debug("ContextMenu: ファイルを開く選択")
+            self.open_file_from_cell(file_path)
 
     def copy_selection(self):
         """選択セルの内容をクリップボードにコピーする"""
@@ -135,6 +163,68 @@ class CustomTableWidget(QTableWidget):
                         logger.debug(f"Skipped read-only cell at row {row}, col {col}")
         
         logger.info(f"ContextMenu: クリア完了 - {cleared_count}個のセルをクリアしました")
+
+    def is_valid_file_path(self, file_path: str) -> bool:
+        """ファイルパスが有効かチェック"""
+        if not file_path or not isinstance(file_path, str):
+            return False
+        
+        # パスが存在するかチェック
+        try:
+            return os.path.exists(file_path) and os.path.isfile(file_path)
+        except (OSError, ValueError):
+            return False
+
+    def is_media_file(self, file_path: str) -> bool:
+        """画像・動画ファイルかどうかを判定"""
+        if not file_path:
+            return False
+        
+        media_extensions = {'.jpg', '.jpeg', '.png', '.mp4', '.avi', '.mov', '.gif', '.bmp', '.tiff', '.webp'}
+        try:
+            from pathlib import Path
+            return Path(file_path).suffix.lower() in media_extensions
+        except (OSError, ValueError):
+            return False
+
+    def open_file_from_cell(self, file_path: str):
+        """セルのファイルパスをデフォルトアプリで開く"""
+        if not file_path:
+            logger.warning("ContextMenu: 空のファイルパスが指定されました")
+            return
+        
+        # ファイルパスの妥当性を再チェック
+        if not self.is_valid_file_path(file_path):
+            logger.warning(f"ContextMenu: 無効なファイルパス - {file_path}")
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "ファイルエラー",
+                f"ファイルが見つかりません:\n{file_path}\n\nファイルが存在するか、パスが正しいかご確認ください。"
+            )
+            return
+        
+        try:
+            # Windowsでファイルをデフォルトアプリで開く
+            import subprocess
+            if os.name == 'nt':  # Windows
+                os.startfile(file_path)
+                logger.info(f"ContextMenu: ファイルを開きました - {file_path}")
+            else:  # macOS/Linux (将来的な対応)
+                if os.name == 'posix':
+                    subprocess.run(['open', file_path], check=True)  # macOS
+                else:
+                    subprocess.run(['xdg-open', file_path], check=True)  # Linux
+                logger.info(f"ContextMenu: ファイルを開きました - {file_path}")
+                
+        except Exception as e:
+            logger.error(f"ContextMenu: ファイルを開く際にエラーが発生 - {file_path}: {e}")
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "ファイルオープンエラー",
+                f"ファイルを開くことができませんでした:\n{file_path}\n\nエラー: {str(e)}\n\n対応するアプリケーションがインストールされているかご確認ください。"
+            )
 
 class BorderDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
