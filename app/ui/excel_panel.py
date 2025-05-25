@@ -955,8 +955,8 @@ class ExcelPanel(QWidget):
         # サンプルテーブルの内容をクリア
         self.sample_table.clearContents()
         
-        # 基本的なヘッダー行を設定（0行目）
-        basic_headers = ["AIの進捗", "元の値", "項目名＝???", "項目名＝???"]
+        # 基本的なヘッダー行を設定（0行目）- 正しい初期状態（項目名1つ）
+        basic_headers = ["AIの進捗", "元の値", "項目名＝???"]
         
         for col, text in enumerate(basic_headers):
             item = QTableWidgetItem(text)
