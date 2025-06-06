@@ -269,8 +269,9 @@ class HelpDialog(QDialog):
             "② Googleアカウントでログイン",
             "③ 「Create API Key」ボタンをクリック",
             "④ 生成されたAPIキーをコピー",
-            "⑤ ExlAIの「設定」メニューから貼り付け"
-        ], "完全無料で使えます！クレジットカード登録も不要です。")
+            "⑤ ExlAIの「設定」メニューから貼り付け",
+            "⑥ 【重要】無料プランの場合は、設定でモデルを「Flash」に変更してください"
+        ], "完全無料で使えます！クレジットカード登録も不要です。ただし、無料プランではFlashモデルのみ利用可能です。")
         
         # テンプレート作成
         template_group = self._create_step_group("ステップ1: テンプレートを作成", "2", [
@@ -460,7 +461,9 @@ class HelpDialog(QDialog):
                 "q": "エラーが表示された時は？",
                 "a": [
                     "・APIキーが正しく設定されているか確認",
-                    "・無料の場合は利用上限に引っかかっている可能性があるので、時間を置いて再実行"
+                    "・【重要】無料プランでProモデルを使用していませんか？設定でFlashモデルに変更してください",
+                    "・無料の場合は利用上限に引っかかっている可能性があるので、時間を置いて再実行",
+                    "・「403 Forbidden」エラーの場合は、モデルが無料プランで利用できない可能性があります"
                 ]
             },
             {
@@ -494,7 +497,9 @@ class HelpDialog(QDialog):
             {
                 "q": "料金について教えて",
                 "a": [
-                    "・モデルをFlashに指定した場合、無料枠内でほぼ十分",
+                    "・【重要】無料プランではFlashモデルのみ利用可能（Proモデルは有料プランが必要）",
+                    "・設定画面でモデルを「gemini-2.0-flash-exp」等のFlashモデルに変更してください",
+                    "・Flashモデルでも高性能で、ほとんどの処理に十分対応可能",
                     "・画像・動画処理も無料枠内で利用可能",
                     "・大量処理時は有料プランへの切り替えがおすすめ",
                     "・アプリ自体の利用料金は一切かかりません"
@@ -522,8 +527,11 @@ class HelpDialog(QDialog):
             {
                 "q": "設定のカスタマイズ",
                 "a": [
-                    "・AIモデルの種類を変更可能",
-                    "・APIキーの管理"
+                    "・AIモデルの種類を変更可能（無料プランはFlashモデルのみ）",
+                    "・推奨Flashモデル: gemini-2.0-flash-exp, gemini-1.5-flash",
+                    "・Proモデル（gemini-pro等）は有料プランでのみ利用可能",
+                    "・APIキーの管理",
+                    "・モデル変更後は必ず「設定を保存」してください"
                 ]
             }
         ]
@@ -657,7 +665,12 @@ pyinstaller --clean ExlAI.spec</pre>
                 <p>AIモデルの設定は <code style="color: {self.colors['accent']};">config.json</code> で管理されています：</p>
                 <ul style="margin-left: 20px;">
                     <li><b style="color: {self.colors['headline']};">APIキー管理</b>: 暗号化して保存</li>
-                    <li><b style="color: {self.colors['headline']};">モデル設定</b>: gemini-pro、gemini-pro-vision等</li>
+                    <li><b style="color: {self.colors['headline']};">モデル設定</b>: 
+                        <ul style="margin-left: 20px; margin-top: 5px;">
+                            <li><span style="color: {self.colors['accent']};">無料プラン対応:</span> gemini-2.0-flash-exp, gemini-1.5-flash等</li>
+                            <li><span style="color: {self.colors['accent']};">有料プラン専用:</span> gemini-pro, gemini-pro-vision等</li>
+                        </ul>
+                    </li>
                     <li><b style="color: {self.colors['headline']};">マルチモーダル対応</b>: 画像・動画ファイルの解析機能</li>
                     <li><b style="color: {self.colors['headline']};">処理オプション</b>: タイムアウト、リトライ回数等</li>
                     <li><b style="color: {self.colors['headline']};">ログ設定</b>: デバッグレベル、出力先等</li>
