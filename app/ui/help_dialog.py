@@ -403,12 +403,22 @@ class HelpDialog(QDialog):
             "A列: meeting001.mp4 → B列: 会議、C列: 来月の売上目標について議論、D列: 高\nA列: tutorial001.mp4 → B列: 教育、C列: エクセル基本操作の説明、D列: 中"
         )
         
+        # 例7: 音声処理
+        audio_example = self._create_example_group(
+            "例7: 音声コンテンツの分析",
+            "テンプレート設定",
+            "A列: 音声ファイルパス\nB列: ジャンル\nC列: 内容要約\nD列: 話者数",
+            "期待される出力",
+            "A列: interview001.mp3 → B列: インタビュー、C列: 新商品について顧客にヒアリング、D列: 2名\nA列: music001.mp3 → B列: 音楽、C列: クラシック風のピアノ演奏、D列: 1名"
+        )
+        
         content_layout.addWidget(name_example)
         content_layout.addWidget(address_example)
         content_layout.addWidget(text_example)
         content_layout.addWidget(category_example)
         content_layout.addWidget(image_example)
         content_layout.addWidget(video_example)
+        content_layout.addWidget(audio_example)
         content_layout.addStretch()
         
         scroll_area.setWidget(content)

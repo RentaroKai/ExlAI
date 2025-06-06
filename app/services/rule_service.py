@@ -20,6 +20,7 @@ class ProcessMode:
     NORMAL = "normal"      # テキスト処理
     IMAGE = "image"        # 画像処理  
     VIDEO = "video"        # 動画処理
+    AUDIO = "audio"        # 音声処理
 
 class RuleService:
     """
@@ -231,8 +232,10 @@ class RuleService:
                 analysis_start_time = time.time()
                 if mode == ProcessMode.IMAGE:
                     analysis_result = await self.gemini.analyze_image(file_path, analysis_prompt)
-                else:  # VIDEO
+                elif mode == ProcessMode.VIDEO:
                     analysis_result = await self.gemini.analyze_video(file_path, analysis_prompt)
+                else:  # AUDIO
+                    analysis_result = await self.gemini.analyze_audio(file_path, analysis_prompt)
                 
                 analysis_time = time.time() - analysis_start_time
                 logger.info(f"✅ Analysis completed in {analysis_time:.2f} seconds")
@@ -257,7 +260,12 @@ class RuleService:
         prompt_instructions = []
         
         # ヘッダー説明（メディアファイル用）
-        media_type_name = "画像" if mode == ProcessMode.IMAGE else "動画"
+        if mode == ProcessMode.IMAGE:
+            media_type_name = "画像"
+        elif mode == ProcessMode.VIDEO:
+            media_type_name = "動画"
+        else:  # AUDIO
+            media_type_name = "音声"
         prompt_instructions.append(
             f"以下に示すのは、{media_type_name}ファイルの解析内容（「元の値」）と、それに対して特定の処理を行った結果得られた複数の出力項目（{field_list}）の具体例です。\n"
         )
@@ -345,8 +353,8 @@ class RuleService:
         # --- Phase1: 動的プロンプト生成（モード別対応） ---
         logger.info(f"Starting rule creation for mode: {mode}")
         
-        if mode in [ProcessMode.IMAGE, ProcessMode.VIDEO]:
-            # 画像・動画モードの場合：実際のファイル内容を解析してプロンプト生成
+        if mode in [ProcessMode.IMAGE, ProcessMode.VIDEO, ProcessMode.AUDIO]:
+            # 画像・動画・音声モードの場合：実際のファイル内容を解析してプロンプト生成
             logger.info(f"Processing {mode} mode rule creation with file analysis")
             rule_prompt = await self._generate_media_rule_prompt(samples, fields, mode)
         else:
@@ -553,8 +561,8 @@ class RuleService:
                 # サンプル一致しない場合はAIを呼び出して処理
                 try:
                     # モードに応じて処理方法を変更
-                    if rule_mode == ProcessMode.IMAGE or rule_mode == ProcessMode.VIDEO:
-                        # 画像・動画の場合はメディア解析APIを使用
+                    if rule_mode in [ProcessMode.IMAGE, ProcessMode.VIDEO, ProcessMode.AUDIO]:
+                        # 画像・動画・音声の場合はメディア解析APIを使用
                         logger.info(f"Processing {rule_mode} file: {inp}")
                         
                         # ファイルパスの検証
@@ -569,12 +577,14 @@ class RuleService:
                         media_prompt += f"\n回答は以下のJSONフォーマットで返してください:\n"
                         media_prompt += json.dumps(rule.get("json_format_example", {}), ensure_ascii=False, indent=2)
                         
-                        # 画像・動画解析APIを呼び出し（非同期）
+                        # 画像・動画・音声解析APIを呼び出し（非同期）
                         logger.debug(f"メディア解析プロンプト:\n{media_prompt}")
                         if rule_mode == ProcessMode.IMAGE:
                             ai_response = await self.gemini.analyze_image(inp, media_prompt)
-                        else:  # VIDEO
+                        elif rule_mode == ProcessMode.VIDEO:
                             ai_response = await self.gemini.analyze_video(inp, media_prompt)
+                        else:  # AUDIO
+                            ai_response = await self.gemini.analyze_audio(inp, media_prompt)
                         
                         # レスポンスをJSON解析
                         text = ai_response.strip()

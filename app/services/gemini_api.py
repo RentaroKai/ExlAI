@@ -138,6 +138,15 @@ class GeminiAPI:
             "response_mime_type": "text/plain",
         }
         
+        # 音声解析用の設定
+        self.audio_analysis_config = {
+            "temperature": 0.3,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 8192,
+            "response_mime_type": "text/plain",
+        }
+        
         # システムプロンプト（互換性のため）
         self.system_prompt = """あなたは会議の書き起こしを行う専門家です。
     以下の点に注意して、音声ファイルに忠実な書き起こしテキストを作成してください：
@@ -481,13 +490,95 @@ class GeminiAPI:
             logger.debug(f"🔍 [非同期] Video analysis error details: {type(e).__name__}: {e}")
             raise GeminiAPIError(error_msg)
 
+    async def analyze_audio(self, file_path: str, prompt: str) -> str:
+        """音声を解析してテキストを生成する（非同期版）
+        
+        Args:
+            file_path (str): 解析する音声ファイルのパス
+            prompt (str): 解析の指示プロンプト
+            
+        Returns:
+            str: 解析結果のテキスト
+            
+        Raises:
+            GeminiAPIError: 解析に失敗した場合
+        """
+        try:
+            logger.info(f"🎵 [非同期] Starting audio analysis: {os.path.basename(file_path)}")
+            logger.debug(f"🔧 [非同期] Audio analysis prompt length: {len(prompt)} characters")
+            start_time = time.time()
+            
+            # ファイルサイズのチェック
+            logger.debug(f"📏 [非同期] Checking file size for: {file_path}")
+            await asyncio.to_thread(self._check_file_size, file_path)
+            logger.debug(f"✅ [非同期] File size check completed")
+            
+            # 音声ファイルをアップロード
+            logger.info(f"⬆️ [非同期] Uploading audio for analysis: {file_path}")
+            uploaded_file = await asyncio.to_thread(self.client.files.upload, file=file_path)
+            logger.info(f"✅ [非同期] Audio uploaded successfully: {uploaded_file.uri}")
+            upload_time = time.time() - start_time
+            logger.debug(f"⏱️ [非同期] Upload completed in {upload_time:.2f} seconds")
+            
+            # ファイル処理の完了を待機
+            logger.info(f"⏳ [非同期] Waiting for audio processing to complete...")
+            if not await asyncio.to_thread(self.wait_for_processing, uploaded_file):
+                raise GeminiAPIError("音声ファイルの処理が完了しませんでした")
+            
+            processing_time = time.time() - start_time
+            logger.debug(f"✅ [非同期] Audio processing completed in {processing_time:.2f} seconds")
+            
+            # 音声解析の実行 (最新APIでは uploaded_file を直接 contents に渡す)
+            analysis_start = time.time()
+            logger.info(f"🤖 [非同期] Starting AI audio analysis...")
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model=self.transcription_model,
+                contents=[prompt, uploaded_file],
+                config=types.GenerateContentConfig(
+                    temperature=self.audio_analysis_config["temperature"],
+                    top_p=self.audio_analysis_config["top_p"],
+                    top_k=self.audio_analysis_config["top_k"],
+                    max_output_tokens=self.audio_analysis_config["max_output_tokens"],
+                )
+            )
+            analysis_time = time.time() - analysis_start
+            logger.debug(f"🎵 [非同期] Audio AI analysis completed in {analysis_time:.2f} seconds")
+            
+            # ファイルを削除（オプション：リソース節約のため）
+            try:
+                logger.debug(f"🗑️ [非同期] Deleting temporary audio file...")
+                await asyncio.to_thread(self.client.files.delete, name=uploaded_file.name)
+                logger.info(f"✅ [非同期] Temporary audio file deleted: {uploaded_file.name}")
+            except Exception as e:
+                logger.warning(f"⚠️ [非同期] Failed to delete temporary file: {e}")
+            
+            result = response.text
+            total_time = time.time() - start_time
+            logger.info(f"🎉 [非同期] Audio analysis completed successfully in {total_time:.2f} seconds, response length: {len(result)} characters")
+            return result
+            
+        except FileNotFoundError as e:
+            error_msg = f"音声ファイルが見つかりません: {str(e)}"
+            logger.error(f"❌ [非同期] {error_msg}")
+            raise GeminiAPIError(error_msg)
+        except VideoFileTooLargeError as e:
+            error_msg = f"音声ファイルサイズエラー: {str(e)}"
+            logger.error(f"❌ [非同期] {error_msg}")
+            raise GeminiAPIError(error_msg)
+        except Exception as e:
+            error_msg = f"音声解析に失敗しました: {str(e)}"
+            logger.error(f"❌ [非同期] {error_msg}")
+            logger.debug(f"🔍 [非同期] Audio analysis error details: {type(e).__name__}: {e}")
+            raise GeminiAPIError(error_msg)
+
     async def analyze_media(self, file_path: str, prompt: str, media_type: str = None) -> str:
-        """メディアファイル（画像・動画）を解析してテキストを生成する汎用メソッド（非同期版）
+        """メディアファイル（画像・動画・音声）を解析してテキストを生成する汎用メソッド（非同期版）
         
         Args:
             file_path (str): 解析するメディアファイルのパス
             prompt (str): 解析の指示プロンプト
-            media_type (str, optional): メディアタイプ ("image" or "video")
+            media_type (str, optional): メディアタイプ ("image", "video", "audio")
                                        Noneの場合は拡張子から自動判定
             
         Returns:
@@ -504,6 +595,8 @@ class GeminiAPI:
                 media_type = MediaType.IMAGE
             elif file_ext in ['.mp4']:
                 media_type = MediaType.VIDEO
+            elif file_ext in ['.mp3']:
+                media_type = MediaType.AUDIO
             else:
                 raise ValueError(f"サポートされていないファイル形式です: {file_ext}")
         
@@ -512,5 +605,7 @@ class GeminiAPI:
             return await self.analyze_image(file_path, prompt)
         elif media_type == MediaType.VIDEO:
             return await self.analyze_video(file_path, prompt)
+        elif media_type == MediaType.AUDIO:
+            return await self.analyze_audio(file_path, prompt)
         else:
             raise ValueError(f"サポートされていないメディアタイプです: {media_type}") 

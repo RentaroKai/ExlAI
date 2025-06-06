@@ -30,6 +30,7 @@ class ProcessMode:
     NORMAL = "normal"      # テキスト処理
     IMAGE = "image"        # 画像処理  
     VIDEO = "video"        # 動画処理
+    AUDIO = "audio"        # 音声処理
 
 class IntegratedExcelUI(QMainWindow):
     def __init__(self):
@@ -211,10 +212,16 @@ class IntegratedExcelUI(QMainWindow):
         self.video_radio.setFont(QFont("Arial", 10))
         self.video_radio.setStyleSheet("color: #333333; border: none;")
         
+        # 音声処理ラジオボタン
+        self.audio_radio = QRadioButton("音声処理")
+        self.audio_radio.setFont(QFont("Arial", 10))
+        self.audio_radio.setStyleSheet("color: #333333; border: none;")
+        
         # ラジオボタンをグループに追加
         self.mode_button_group.addButton(self.normal_radio, 0)
         self.mode_button_group.addButton(self.image_radio, 1)
         self.mode_button_group.addButton(self.video_radio, 2)
+        self.mode_button_group.addButton(self.audio_radio, 3)
         
         # モード切替時のイベント接続
         self.mode_button_group.buttonClicked.connect(self.on_mode_changed)
@@ -223,6 +230,7 @@ class IntegratedExcelUI(QMainWindow):
         mode_layout.addWidget(self.normal_radio)
         mode_layout.addWidget(self.image_radio)
         mode_layout.addWidget(self.video_radio)
+        mode_layout.addWidget(self.audio_radio)
         mode_layout.addStretch()  # 右側にスペースを追加
         
         # 親レイアウトに追加（ストレッチファクター0で固定サイズ）
@@ -240,6 +248,9 @@ class IntegratedExcelUI(QMainWindow):
         elif button_id == 2:
             self.current_mode = ProcessMode.VIDEO
             logger.info("モード変更: 動画処理")
+        elif button_id == 3:
+            self.current_mode = ProcessMode.AUDIO
+            logger.info("モード変更: 音声処理")
         
         # モード変更をAIパネルに通知（今後の実装で使用）
         if hasattr(self.ai_panel, 'on_mode_changed'):
@@ -303,6 +314,8 @@ class IntegratedExcelUI(QMainWindow):
             processing_msg = f"画像解析処理を開始しています... ({len(inputs)}件)"
         elif rule_mode == 'video':
             processing_msg = f"動画解析処理を開始しています... ({len(inputs)}件)"
+        elif rule_mode == 'audio':
+            processing_msg = f"音声解析処理を開始しています... ({len(inputs)}件)"
         else:
             processing_msg = f"テキスト処理を開始しています... ({len(inputs)}件)"
             

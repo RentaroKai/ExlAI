@@ -183,11 +183,11 @@ class FileDropBorderDelegate(QStyledItemDelegate):
 
 
 class FilePanel(QWidget):
-    """画像・動画処理用のファイルパネル"""
+    """画像・動画・音声処理用のファイルパネル"""
     
     def __init__(self, mode="image", parent=None):
         super().__init__(parent)
-        self.mode = mode  # "image" or "video"
+        self.mode = mode  # "image", "video", or "audio"
         self.supported_formats = self.get_supported_formats()
         self.setup_ui()
         logger.info(f"FilePanel initialized - mode: {self.mode}, formats: {self.supported_formats}")
@@ -198,6 +198,8 @@ class FilePanel(QWidget):
             return ['.jpg', '.jpeg', '.png']
         elif self.mode == "video":
             return ['.mp4']
+        elif self.mode == "audio":
+            return ['.mp3']
         else:
             return []
     
@@ -323,7 +325,14 @@ class FilePanel(QWidget):
             self.process_table.setItem(0, col, QTableWidgetItem(header))
         
         # ドロップヒント表示
-        mode_text = "画像ファイル" if self.mode == "image" else "動画ファイル"
+        if self.mode == "image":
+            mode_text = "画像ファイル"
+        elif self.mode == "video":
+            mode_text = "動画ファイル"
+        elif self.mode == "audio":
+            mode_text = "音声ファイル"
+        else:
+            mode_text = "ファイル"
         hint_text = f"{mode_text}をここにドラッグ&ドロップしてください"
         
         hint_item = QTableWidgetItem(hint_text)

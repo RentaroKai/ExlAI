@@ -329,7 +329,7 @@ class CustomTableWidget(QTableWidget):
         if not file_path:
             return False
         
-        media_extensions = {'.jpg', '.jpeg', '.png', '.mp4', '.avi', '.mov', '.gif', '.bmp', '.tiff', '.webp'}
+        media_extensions = {'.jpg', '.jpeg', '.png', '.mp4', '.avi', '.mov', '.gif', '.bmp', '.tiff', '.webp', '.mp3'}
         try:
             from pathlib import Path
             return Path(file_path).suffix.lower() in media_extensions
@@ -433,7 +433,7 @@ class DropAreaLabel(QLabel):
                 background-color: #E8F4F8;
             }
         """)
-        self.setText("ファイルをここにドラッグ&ドロップ\n対応形式: JPG, PNG, MP4")
+        self.setText("ファイルをここにドラッグ&ドロップ\n対応形式: JPG, PNG, MP4, MP3")
         self.setMinimumHeight(64)  # 80px → 64px（20%削減）
         self.parent_panel = parent
         self.target_table = target_table  # "sample" または "data"
@@ -500,7 +500,7 @@ class DropAreaLabel(QLabel):
             QMessageBox.warning(
                 self.parent_panel, 
                 "ファイル処理エラー", 
-                "\n".join(error_messages) + "\n\n対応形式: JPG, PNG, MP4\n最大サイズ: 100MB"
+                "\n".join(error_messages) + "\n\n対応形式: JPG, PNG, MP4, MP3\n最大サイズ: 100MB"
             )
         
         # 有効なファイルがある場合は処理を実行
@@ -520,7 +520,7 @@ class DropAreaLabel(QLabel):
     
     def is_valid_file_format(self, file_path: str) -> bool:
         """ファイル形式が有効かチェック"""
-        valid_extensions = {'.jpg', '.jpeg', '.png', '.mp4'}
+        valid_extensions = {'.jpg', '.jpeg', '.png', '.mp4', '.mp3'}
         _, ext = os.path.splitext(file_path.lower())
         return ext in valid_extensions
 
@@ -1163,8 +1163,8 @@ class ExcelPanel(QWidget):
         self.current_mode = new_mode
         
         # ドラッグ&ドロップエリアの表示/非表示切替
-        if new_mode in [ProcessMode.IMAGE, ProcessMode.VIDEO]:
-            # 画像・動画モードの場合はドラッグ&ドロップエリアを表示
+        if new_mode in [ProcessMode.IMAGE, ProcessMode.VIDEO, ProcessMode.AUDIO]:
+            # 画像・動画・音声モードの場合はドラッグ&ドロップエリアを表示
             self.sample_drop_area.show()
             self.data_drop_area.show()
             
@@ -1172,9 +1172,12 @@ class ExcelPanel(QWidget):
             if new_mode == ProcessMode.IMAGE:
                 sample_text = "📸 画像ファイルをドラッグ&ドロップ\n（テンプレート用）\n対応形式: JPG, PNG"
                 data_text = "📸 画像ファイルをドラッグ&ドロップ\n（処理用）\n対応形式: JPG, PNG"
-            else:  # VIDEO
+            elif new_mode == ProcessMode.VIDEO:
                 sample_text = "🎬 動画ファイルをドラッグ&ドロップ\n（テンプレート用）\n対応形式: MP4"
                 data_text = "🎬 動画ファイルをドラッグ&ドロップ\n（処理用）\n対応形式: MP4"
+            else:  # AUDIO
+                sample_text = "🎵 音声ファイルをドラッグ&ドロップ\n（テンプレート用）\n対応形式: MP3"
+                data_text = "🎵 音声ファイルをドラッグ&ドロップ\n（処理用）\n対応形式: MP3"
             
             self.sample_drop_area.setText(sample_text)
             self.data_drop_area.setText(data_text)
